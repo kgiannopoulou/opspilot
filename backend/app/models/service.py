@@ -1,7 +1,15 @@
-from sqlalchemy import BigInteger, CheckConstraint, SmallInteger, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, CheckConstraint, Column, ForeignKey, SmallInteger, String, Table, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+service_dependencies = Table(
+    "service_dependencies",
+    Base.metadata,
+    Column("service_id", ForeignKey("services.id", ondelete="CASCADE"), primary_key=True),
+    Column("depends_on_id", ForeignKey("services.id", ondelete="CASCADE"), primary_key=True),
+    CheckConstraint("service_id <> depends_on_id", name="no_self_dependency"),
+)
 
 
 class Service(TimestampMixin, Base):
@@ -16,3 +24,10 @@ class Service(TimestampMixin, Base):
     tier: Mapped[int] = mapped_column(SmallInteger)
     owner_team: Mapped[str] = mapped_column(String(64))
     description: Mapped[str] = mapped_column(Text, default="")
+
+    dependencies: Mapped[list["Service"]] = relationship(
+        secondary=service_dependencies,
+        primaryjoin=lambda: Service.id == service_dependencies.c.service_id,
+        secondaryjoin=lambda: Service.id == service_dependencies.c.depends_on_id,
+        order_by=lambda: Service.name,
+    )

@@ -8,6 +8,7 @@ from app.models.enums import TicketEventType, TicketStatus
 from app.repositories.catalog import ServiceRepository, UserRepository
 from app.repositories.tickets import TicketRepository
 from app.schemas.ticket import CommentCreate, TicketCreate, TicketTransition, TicketUpdate
+from app.services import audit
 from app.services.ticket_workflow import REQUIRES_RESOLUTION, can_transition
 
 
@@ -37,7 +38,10 @@ class TicketService:
         return service.id
 
     def _event(self, ticket: Ticket, actor: User, type_: TicketEventType, **kwargs: object) -> None:
+        """Timeline entry for the UI plus an audit row, both inside the current transaction."""
         self.tickets.add_event(TicketEvent(ticket_id=ticket.id, actor_id=actor.id, type=type_, **kwargs))
+        changes = {k: v for k, v in kwargs.items() if v not in (None, {})}
+        audit.record(self.db, actor, f"ticket.{type_.value.lower()}", "ticket", ticket.number, changes)
 
     def _commit(self, ticket: Ticket) -> Ticket:
         self.db.commit()

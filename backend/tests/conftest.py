@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.database import get_db
 from app.main import app
-from app.models import Base, Service, User
+from app.models import Role, Service, User
+from app.scripts.seed import reset
 
 TEST_DATABASE_URL = os.environ.get(
     "OPSPILOT_TEST_DATABASE_URL", "postgresql+psycopg://opspilot:opspilot@localhost:5438/opspilot_test"
@@ -47,10 +48,8 @@ def engine():
 def session_factory(engine) -> Iterator[sessionmaker[Session]]:
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     yield factory
-    tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
-    with engine.begin() as conn:
-        conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
-        conn.execute(text("ALTER SEQUENCE ticket_number_seq RESTART"))
+    with factory() as session:
+        reset(session)
 
 
 @pytest.fixture
@@ -77,8 +76,9 @@ def client(session_factory) -> Iterator[TestClient]:
 
 @pytest.fixture
 def seeded(db: Session) -> dict[str, User | Service]:
-    agent = User(email="agent@opspilot.dev", full_name="Sam Agent")
-    maria = User(email="maria@opspilot.dev", full_name="Maria Engineer")
+    roles = {r.name: r.id for r in db.query(Role)}
+    agent = User(email="agent@opspilot.dev", full_name="Sam Agent", role_id=roles["support_agent"])
+    maria = User(email="maria@opspilot.dev", full_name="Maria Engineer", role_id=roles["engineer"])
     payment = Service(name="payment-service", display_name="Payment Service", tier=1, owner_team="Payments")
     auth = Service(name="auth-service", display_name="Authentication Service", tier=1, owner_team="Identity")
     db.add_all([agent, maria, payment, auth])

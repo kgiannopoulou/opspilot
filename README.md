@@ -94,6 +94,44 @@ OPEN ──► TRIAGED ──► INVESTIGATING ──► RESOLVED ──► CLOS
 
 Interactive OpenAPI docs: `http://localhost:8010/docs`.
 
+## Database design
+
+18 tables in PostgreSQL 16 + `pgvector`, managed by Alembic migrations:
+
+```mermaid
+erDiagram
+    roles ||--o{ users : has
+    users ||--o{ tickets : "reports / is assigned"
+    services ||--o{ tickets : "affected by"
+    tickets ||--o{ ticket_comments : has
+    tickets ||--o{ ticket_events : timeline
+    services ||--o{ service_dependencies : "depends on"
+    incidents ||--o{ incident_tickets : groups
+    tickets ||--o| incident_tickets : "belongs to ≤ 1"
+    incidents ||--o{ incident_services : affects
+    services ||--o{ application_logs : emits
+    services ||--o{ metric_samples : emits
+    knowledge_documents ||--o{ document_chunks : "split into (vector 384)"
+    incidents ||--o{ ai_investigations : "investigated by"
+    ai_investigations ||--o{ ai_evidence : "backed by"
+    ai_evidence }o--o| knowledge_documents : cites
+    users ||--o{ audit_events : performs
+```
+
+- **Integrity in the schema, not only in code:** foreign keys with deliberate `ON DELETE` rules, unique constraints
+  (one incident per ticket, one metric value per series/minute), `CHECK` constraints for every enumeration,
+  `confidence BETWEEN 0 AND 1`, no self-dependencies.
+- **Indexes for real queries:** composite queue index, partial index on WARN/ERROR logs, BRIN on log timestamps,
+  GIN on document tags, HNSW (`vector_cosine_ops`) on chunk embeddings.
+- **JSONB only where justified** — variable log attributes, event payloads, engine-owned evidence data.
+- **Transactions + audit:** each use case commits the change, its timeline event and its `audit_events` row together.
+- A test fails if ORM models and migrations drift (`alembic` autogenerate comparison).
+
+→ Full design notes and the complete ER diagram: [docs/architecture/database.md](docs/architecture/database.md)
+
+The demo seed (`python -m app.scripts.seed --reset`) loads 60 days of incident history, ~300 tickets, and the last
+6 hours of simulated logs/metrics with three live incidents.
+
 ## Repository structure
 
 ```
@@ -141,7 +179,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 4 | Repository structure | ✅ |
 | 5 | Enterprise application simulator | ✅ |
 | 6 | Ticket management system | ✅ |
-| 7 | Database design | ⏳ |
+| 7 | Database design | ✅ |
 | 8 | Authentication & RBAC | ⏳ |
 | 9 | Analyst dashboard | ⏳ |
 | 10 | Incident investigation page | ⏳ |

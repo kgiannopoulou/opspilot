@@ -35,6 +35,54 @@ class TicketEventType(StrEnum):
     LINKED_TO_INCIDENT = "LINKED_TO_INCIDENT"
 
 
+class Severity(StrEnum):
+    SEV1 = "SEV1"  # critical: core flow down for many customers
+    SEV2 = "SEV2"  # major: degraded core flow or full outage of a secondary one
+    SEV3 = "SEV3"
+    SEV4 = "SEV4"
+
+
+class IncidentStatus(StrEnum):
+    INVESTIGATING = "INVESTIGATING"
+    IDENTIFIED = "IDENTIFIED"
+    MONITORING = "MONITORING"
+    RESOLVED = "RESOLVED"
+
+
+class LogLevel(StrEnum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARN = "WARN"
+    ERROR = "ERROR"
+
+
+class DocumentCategory(StrEnum):
+    RUNBOOK = "runbook"
+    TROUBLESHOOTING = "troubleshooting"
+    ARCHITECTURE = "architecture"
+
+
+class InvestigationStatus(StrEnum):
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class EvidenceKind(StrEnum):
+    LOG_PATTERN = "LOG_PATTERN"
+    METRIC_DELTA = "METRIC_DELTA"
+    DEPENDENCY_HEALTH = "DEPENDENCY_HEALTH"
+    SIMILAR_INCIDENT = "SIMILAR_INCIDENT"
+    DOCUMENT = "DOCUMENT"
+    CHANGE_EVENT = "CHANGE_EVENT"
+
+
+class EvidenceStance(StrEnum):
+    SUPPORTS = "SUPPORTS"
+    CONTRADICTS = "CONTRADICTS"
+    CONTEXT = "CONTEXT"
+
+
 def db_enum(enum_cls: type[StrEnum], name: str) -> Enum:
     """Store enums as VARCHAR + CHECK constraint: readable in psql, and adding a value is a simple migration."""
     return Enum(

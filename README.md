@@ -64,6 +64,36 @@ ShopStream platform — `auth-service`, `payment-service`, `order-service`, `not
 
 → [simulator/README.md](simulator/README.md)
 
+## Ticket management
+
+The platform is useful before any AI is involved. Tickets follow a support lifecycle enforced by a state machine
+([`ticket_workflow.py`](backend/app/services/ticket_workflow.py)):
+
+```
+OPEN ──► TRIAGED ──► INVESTIGATING ──► RESOLVED ──► CLOSED
+  │         ▲  │            ▲              │
+  │         └──┘ (back)     └── reopen ────┘
+  └──► CLOSED (duplicate / not a bug — resolution note required)
+```
+
+- Human-friendly numbers (`TCK-2026-00042`) from a Postgres sequence, priority P1–P4, affected service, labels.
+- Assignment, public and internal comments, and an append-only **event timeline** (created, status changed,
+  priority changed, assigned, commented) written in the same transaction as the change.
+- Concurrent updates to one ticket are serialised with `SELECT … FOR UPDATE`.
+- The API returns `allowed_transitions` with every ticket so the UI only offers valid actions.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/tickets?status=&priority=&service=&assignee_id=&unassigned=&q=&page=` | Filtered, paginated queue |
+| `POST` | `/api/v1/tickets` | Create a ticket |
+| `GET` / `PATCH` | `/api/v1/tickets/{number}` | Read / edit title, description, priority, service, labels |
+| `POST` | `/api/v1/tickets/{number}/transition` | Move through the lifecycle |
+| `POST` | `/api/v1/tickets/{number}/assign` | Assign / unassign |
+| `GET` / `POST` | `/api/v1/tickets/{number}/comments` | Discussion |
+| `GET` | `/api/v1/tickets/{number}/events` | Timeline |
+
+Interactive OpenAPI docs: `http://localhost:8010/docs`.
+
 ## Repository structure
 
 ```
@@ -110,7 +140,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 3 | Architecture design | ✅ |
 | 4 | Repository structure | ✅ |
 | 5 | Enterprise application simulator | ✅ |
-| 6 | Ticket management system | ⏳ |
+| 6 | Ticket management system | ✅ |
 | 7 | Database design | ⏳ |
 | 8 | Authentication & RBAC | ⏳ |
 | 9 | Analyst dashboard | ⏳ |

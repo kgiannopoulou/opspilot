@@ -132,6 +132,38 @@ erDiagram
 The demo seed (`python -m app.scripts.seed --reset`) loads 60 days of incident history, ~300 tickets, and the last
 6 hours of simulated logs/metrics with three live incidents.
 
+## Authentication & access control
+
+| Endpoint | Behaviour |
+|---|---|
+| `POST /api/v1/auth/login` | bcrypt-verified credentials → 15-minute **JWT access token** (HS256, algorithm pinned, issuer checked) in the body + **refresh token** in an `HttpOnly`, `SameSite=Strict` cookie scoped to `/api/v1/auth` |
+| `POST /api/v1/auth/refresh` | **Rotates** the refresh token on every use. Presenting an already-rotated token is treated as theft: the whole token family is revoked |
+| `POST /api/v1/auth/logout` | Revokes the session's refresh-token family and clears the cookie |
+| `GET /api/v1/auth/me` | Current user, role and effective permissions |
+
+Refresh tokens are opaque random strings stored only as SHA-256 hashes. Failed logins are throttled per
+e-mail + IP in Redis (5 failures → 15-minute lock), error messages never reveal whether an e-mail exists, and login
+timing is equalised for unknown users. Users are re-loaded on every request, so deactivating an account takes effect
+immediately rather than when its JWT expires. Logins, failures, token-reuse detection and all user management
+are written to `audit_events`.
+
+**Role-based access control** — roles live in the database, permissions per role in
+[`app/auth/permissions.py`](backend/app/auth/permissions.py), enforced with a `require(Permission.X)` dependency:
+
+| Permission | Viewer | Support Agent | Engineer | Admin |
+|---|:-:|:-:|:-:|:-:|
+| `tickets:read`, `incidents:read`, `dashboard:read` | ✅ | ✅ | ✅ | ✅ |
+| `tickets:write` — create/update/comment/assign | | ✅ | ✅ | ✅ |
+| `incidents:investigate` — run investigations, link tickets | | | ✅ | ✅ |
+| `users:manage` — `POST/PATCH/DELETE /users` | | | | ✅ |
+| `services:manage`, `audit:read` | | | | ✅ |
+
+`DELETE /api/v1/users/{id}` requires **admin**; it is a soft delete (history keeps its references) that also
+revokes every refresh token. Admins cannot delete, deactivate or demote themselves.
+
+Demo accounts (password `opspilot-demo`): `nikos@opspilot.dev` (admin), `maria@opspilot.dev` and
+`alex@opspilot.dev` (engineer), `sam@opspilot.dev` (support agent), `viewer@opspilot.dev` (viewer).
+
 ## Repository structure
 
 ```
@@ -180,7 +212,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 5 | Enterprise application simulator | ✅ |
 | 6 | Ticket management system | ✅ |
 | 7 | Database design | ✅ |
-| 8 | Authentication & RBAC | ⏳ |
+| 8 | Authentication & RBAC | ✅ |
 | 9 | Analyst dashboard | ⏳ |
 | 10 | Incident investigation page | ⏳ |
 

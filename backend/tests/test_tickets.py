@@ -45,9 +45,9 @@ def test_unknown_service_is_rejected(client, seeded):
     assert "unknown service" in response.json()["detail"]
 
 
-def test_requests_without_a_known_user_are_rejected(client, seeded):
+def test_requests_without_a_valid_token_are_rejected(client, seeded):
     assert client.get(API).status_code == 401
-    assert client.get(API, headers={"X-User-Email": "ghost@example.com"}).status_code == 401
+    assert client.get(API, headers={"Authorization": "Bearer not-a-jwt"}).status_code == 401
 
 
 def test_full_lifecycle(client, seeded):

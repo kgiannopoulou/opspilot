@@ -21,6 +21,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.security import hash_password
 from app.models import Base, Incident, IncidentTicket, Role, Service, Ticket, User
 from app.models.enums import IncidentStatus, Priority, Severity, TicketSource, TicketStatus
 from app.repositories.observability import bulk_insert_logs, bulk_insert_metrics
@@ -31,6 +32,8 @@ from app.services.tickets import TicketService
 from simulator.engine import ScheduledIncident, simulate
 from simulator.incidents.scenarios import SCENARIOS
 from simulator.topology import SERVICES
+
+DEMO_PASSWORD = "opspilot-demo"  # documented in the README; every demo account uses it
 
 # Tables whose rows come from migrations (reference data) and must survive a reset.
 REFERENCE_TABLES = {"roles"}
@@ -175,7 +178,11 @@ def reset(db: Session) -> None:
 
 def seed_catalog(db: Session) -> tuple[dict[str, User], dict[str, Service]]:
     roles = {r.name: r for r in db.scalars(select(Role))}
-    users = {email: User(email=email, full_name=name, role_id=roles[role].id) for email, name, role in TEAM}
+    password_hash = hash_password(DEMO_PASSWORD)
+    users = {
+        email: User(email=email, full_name=name, role_id=roles[role].id, password_hash=password_hash)
+        for email, name, role in TEAM
+    }
     services = {
         s.name: Service(
             name=s.name, display_name=s.display_name, tier=s.tier, owner_team=s.owner_team, description=s.description

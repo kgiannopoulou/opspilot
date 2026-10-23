@@ -8,7 +8,7 @@ from app.models.knowledge import DocumentChunk, KnowledgeDocument
 from app.models.observability import ApplicationLog, MetricSample
 from app.models.service import Service, service_dependencies
 from app.models.ticket import Ticket, TicketComment, TicketEvent
-from app.models.user import Role, User
+from app.models.user import RefreshToken, Role, User
 
 __all__ = [
     "AIEvidence",
@@ -21,6 +21,7 @@ __all__ = [
     "IncidentTicket",
     "KnowledgeDocument",
     "MetricSample",
+    "RefreshToken",
     "Role",
     "Service",
     "Ticket",

@@ -4,13 +4,16 @@ import os
 from collections.abc import Iterator
 
 import pytest
+import redis
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.auth.rate_limit import LoginThrottle, get_login_throttle
 from app.core.database import get_db
+from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models import Role, Service, User
 from app.scripts.seed import reset
@@ -18,6 +21,9 @@ from app.scripts.seed import reset
 TEST_DATABASE_URL = os.environ.get(
     "OPSPILOT_TEST_DATABASE_URL", "postgresql+psycopg://opspilot:opspilot@localhost:5438/opspilot_test"
 )
+TEST_REDIS_URL = os.environ.get("OPSPILOT_TEST_REDIS_URL", "redis://localhost:6381/15")
+PASSWORD = "correct-horse-battery"
+PASSWORD_HASH = hash_password(PASSWORD)  # bcrypt is slow on purpose; hash once per test run
 
 
 def _ensure_database(url: str) -> None:
@@ -60,7 +66,15 @@ def db(session_factory) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(session_factory) -> Iterator[TestClient]:
+def throttle() -> Iterator[LoginThrottle]:
+    client = redis.Redis.from_url(TEST_REDIS_URL, decode_responses=True)
+    client.flushdb()
+    yield LoginThrottle(client)
+    client.flushdb()
+
+
+@pytest.fixture
+def client(session_factory, throttle) -> Iterator[TestClient]:
     def override() -> Iterator[Session]:
         session = session_factory()
         try:
@@ -70,6 +84,7 @@ def client(session_factory) -> Iterator[TestClient]:
             session.close()
 
     app.dependency_overrides[get_db] = override
+    app.dependency_overrides[get_login_throttle] = lambda: throttle
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -77,14 +92,23 @@ def client(session_factory) -> Iterator[TestClient]:
 @pytest.fixture
 def seeded(db: Session) -> dict[str, User | Service]:
     roles = {r.name: r.id for r in db.query(Role)}
-    agent = User(email="agent@opspilot.dev", full_name="Sam Agent", role_id=roles["support_agent"])
-    maria = User(email="maria@opspilot.dev", full_name="Maria Engineer", role_id=roles["engineer"])
+
+    def user(email: str, name: str, role: str) -> User:
+        return User(email=email, full_name=name, role_id=roles[role], password_hash=PASSWORD_HASH)
+
+    people = {
+        "agent": user("agent@opspilot.dev", "Sam Agent", "support_agent"),
+        "maria": user("maria@opspilot.dev", "Maria Engineer", "engineer"),
+        "admin": user("admin@opspilot.dev", "Nikos Admin", "admin"),
+        "viewer": user("viewer@opspilot.dev", "Dana Viewer", "viewer"),
+    }
     payment = Service(name="payment-service", display_name="Payment Service", tier=1, owner_team="Payments")
     auth = Service(name="auth-service", display_name="Authentication Service", tier=1, owner_team="Identity")
-    db.add_all([agent, maria, payment, auth])
+    db.add_all([*people.values(), payment, auth])
     db.commit()
-    return {"agent": agent, "maria": maria, "payment": payment, "auth": auth}
+    return people | {"payment": payment, "auth": auth}
 
 
 def as_user(user: User) -> dict[str, str]:
-    return {"X-User-Email": user.email}
+    """Bearer header for `user`, minted directly (login itself is covered in test_auth.py)."""
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.role.name)[0]}"}

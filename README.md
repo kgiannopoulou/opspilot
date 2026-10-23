@@ -32,13 +32,24 @@ a confidence score, the evidence behind it, next investigation steps and the rel
 
 → Full write-up: [docs/problem-statement.md](docs/problem-statement.md)
 
+## Architecture
+
+![OpsPilot architecture](docs/architecture/architecture.svg)
+
+A Next.js analyst UI talks to a FastAPI backend. PostgreSQL is the system of record (tickets, incidents, logs,
+metrics, audit) and will hold the `pgvector` knowledge base; Redis provides caching and rate limiting.
+The investigation engine correlates logs, metrics and past incidents into an evidence-backed root-cause report.
+
+→ Components, flows and design principles: [docs/architecture](docs/architecture/README.md) ·
+decisions: [docs/decisions](docs/decisions)
+
 ## Roadmap
 
 | # | Step | Status |
 |---|------|--------|
 | 1 | Product identity | ✅ |
 | 2 | Problem definition | ✅ |
-| 3 | Architecture design | ⏳ |
+| 3 | Architecture design | ✅ |
 | 4 | Repository structure | ⏳ |
 | 5 | Enterprise application simulator | ⏳ |
 | 6 | Ticket management system | ⏳ |

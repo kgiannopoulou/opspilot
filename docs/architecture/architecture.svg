@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f172a"/><stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="620" rx="16" fill="url(#bg)"/>
+  <text x="32" y="44" fill="#f8fafc" font-size="22" font-weight="700">OpsPilot — system architecture</text>
+  <text x="32" y="68" fill="#94a3b8" font-size="13">Tickets → Logs → Metrics → Investigation → Resolution</text>
+
+  <!-- Frontend -->
+  <rect x="355" y="92" width="250" height="70" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+  <text x="480" y="122" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Next.js UI</text>
+  <text x="480" y="144" fill="#94a3b8" font-size="12" text-anchor="middle">Analyst dashboard · incident workspace</text>
+
+  <line x1="480" y1="162" x2="480" y2="212" stroke="#64748b" stroke-width="2" marker-end="url(#a)" marker-start="url(#a)"/>
+  <text x="490" y="192" fill="#94a3b8" font-size="11">REST + JWT (same-origin /api rewrite)</text>
+
+  <!-- API -->
+  <rect x="300" y="214" width="360" height="92" rx="10" fill="#1e293b" stroke="#a78bfa" stroke-width="2"/>
+  <text x="480" y="242" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">FastAPI backend</text>
+  <text x="480" y="264" fill="#94a3b8" font-size="12" text-anchor="middle">auth · RBAC · tickets · incidents · services</text>
+  <text x="480" y="284" fill="#94a3b8" font-size="12" text-anchor="middle">routers → services → repositories · audit trail</text>
+
+  <line x1="350" y1="306" x2="170" y2="370" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="480" y1="306" x2="480" y2="370" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="610" y1="306" x2="790" y2="370" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- Postgres -->
+  <rect x="40" y="372" width="260" height="140" rx="10" fill="#1e293b" stroke="#34d399" stroke-width="2"/>
+  <text x="170" y="400" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">PostgreSQL 16</text>
+  <text x="60" y="426" fill="#cbd5e1" font-size="12">• users · roles · refresh tokens</text>
+  <text x="60" y="446" fill="#cbd5e1" font-size="12">• tickets · comments · events</text>
+  <text x="60" y="466" fill="#cbd5e1" font-size="12">• incidents · services · audit</text>
+  <text x="60" y="486" fill="#cbd5e1" font-size="12">• application_logs · metric_samples</text>
+  <text x="60" y="506" fill="#cbd5e1" font-size="12">• Alembic migrations</text>
+
+  <!-- Redis -->
+  <rect x="360" y="372" width="240" height="110" rx="10" fill="#1e293b" stroke="#f87171" stroke-width="2"/>
+  <text x="480" y="400" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Redis 7</text>
+  <text x="380" y="426" fill="#cbd5e1" font-size="12">• dashboard cache</text>
+  <text x="380" y="446" fill="#cbd5e1" font-size="12">• login rate limiting</text>
+  <text x="380" y="466" fill="#cbd5e1" font-size="12">• background job queue (planned)</text>
+
+  <!-- Investigation engine -->
+  <rect x="660" y="372" width="260" height="110" rx="10" fill="#1e293b" stroke="#fbbf24" stroke-width="2"/>
+  <text x="790" y="400" fill="#f8fafc" font-size="16" font-weight="600" text-anchor="middle">Investigation engine</text>
+  <text x="680" y="426" fill="#cbd5e1" font-size="12">• evidence collectors (logs, metrics)</text>
+  <text x="680" y="446" fill="#cbd5e1" font-size="12">• hypothesis scoring · similar incidents</text>
+  <text x="680" y="466" fill="#cbd5e1" font-size="12">• RAG + LLM layer (planned)</text>
+
+  <line x1="790" y1="482" x2="790" y2="532" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="680" y="534" width="220" height="60" rx="10" fill="#1e293b" stroke="#fbbf24" stroke-dasharray="5 4" stroke-width="2"/>
+  <text x="790" y="560" fill="#f8fafc" font-size="14" font-weight="600" text-anchor="middle">pgvector knowledge base</text>
+  <text x="790" y="580" fill="#94a3b8" font-size="12" text-anchor="middle">runbooks · troubleshooting · architecture</text>
+
+  <!-- Simulator -->
+  <rect x="40" y="540" width="560" height="56" rx="10" fill="#1e293b" stroke="#94a3b8" stroke-dasharray="5 4" stroke-width="2"/>
+  <text x="320" y="564" fill="#f8fafc" font-size="14" font-weight="600" text-anchor="middle">ShopStream simulator — observability data</text>
+  <text x="320" y="584" fill="#94a3b8" font-size="12" text-anchor="middle">auth · payment · order · notification services + database → logs │ metrics │ incidents</text>
+  <line x1="170" y1="540" x2="170" y2="514" stroke="#64748b" stroke-width="2" marker-end="url(#a)"/>
+</svg>

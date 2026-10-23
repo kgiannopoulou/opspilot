@@ -43,6 +43,43 @@ The investigation engine correlates logs, metrics and past incidents into an evi
 → Components, flows and design principles: [docs/architecture](docs/architecture/README.md) ·
 decisions: [docs/decisions](docs/decisions)
 
+## Repository structure
+
+```
+opspilot/
+├── frontend/            Next.js analyst UI (app/, components/, hooks/, services/, tests/)
+├── backend/
+│   ├── app/
+│   │   ├── api/         FastAPI routers
+│   │   ├── auth/        JWT + role-based access control
+│   │   ├── models/      SQLAlchemy ORM models
+│   │   ├── schemas/     Pydantic request/response contracts
+│   │   ├── services/    business rules, one transaction per use case
+│   │   ├── repositories/ database access
+│   │   ├── ai/          investigation engine
+│   │   ├── workers/     background jobs
+│   │   └── core/        config, database, security
+│   └── tests/
+├── simulator/           ShopStream environment (log_generator/, metric_generator/, incidents/)
+├── knowledge-base/      runbooks/, troubleshooting/, architecture/
+├── infrastructure/      docker/ (Dockerfiles), terraform/ (planned)
+├── docs/                architecture/, decisions/, screenshots/
+├── .github/workflows/   CI: backend lint + tests, frontend typecheck + build, Docker build
+├── docker-compose.yml
+├── .env.example
+├── CONTRIBUTING.md
+└── LICENSE
+```
+
+## Getting started
+
+```bash
+docker compose up --build        # UI http://localhost:3010 · API http://localhost:8010/docs
+```
+
+Ports are deliberately non-default (Postgres 5438, Redis 6381, API 8010, UI 3010) so OpsPilot can run next to
+other local stacks. Local development without Docker for the apps is described in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Roadmap
 
 | # | Step | Status |
@@ -50,7 +87,7 @@ decisions: [docs/decisions](docs/decisions)
 | 1 | Product identity | ✅ |
 | 2 | Problem definition | ✅ |
 | 3 | Architecture design | ✅ |
-| 4 | Repository structure | ⏳ |
+| 4 | Repository structure | ✅ |
 | 5 | Enterprise application simulator | ⏳ |
 | 6 | Ticket management system | ⏳ |
 | 7 | Database design | ⏳ |

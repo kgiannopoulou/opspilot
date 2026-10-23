@@ -5,14 +5,17 @@ description = "OpsPilot API — application support & incident intelligence"
 requires-python = ">=3.12"
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["B008"]  # FastAPI's Depends() in argument defaults is idiomatic
 
+[tool.ruff.lint.isort]
+known-first-party = ["app", "simulator"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "../simulator/tests"]
 pythonpath = [".", ".."]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

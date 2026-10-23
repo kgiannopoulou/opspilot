@@ -43,6 +43,27 @@ The investigation engine correlates logs, metrics and past incidents into an evi
 → Components, flows and design principles: [docs/architecture](docs/architecture/README.md) ·
 decisions: [docs/decisions](docs/decisions)
 
+## ShopStream simulator
+
+OpsPilot needs real evidence to investigate, so the repository ships a deterministic simulator of the fictional
+ShopStream platform — `auth-service`, `payment-service`, `order-service`, `notification-service` and
+`postgres-primary` — that emits realistic logs and per-minute metrics and can inject incidents:
+
+```
+2026-10-22T14:31:42Z INFO  payment-service  Payment request initiated order_id=ORD-84931
+2026-10-22T14:31:42Z INFO  payment-service  Calling payment gateway provider=stripe
+2026-10-22T14:31:47Z ERROR payment-service  GatewayTimeoutException provider=stripe timeout=5000ms order_id=ORD-84931
+2026-10-22T14:31:47Z WARN  order-service  Payment failed order_id=ORD-84931 retry=1
+```
+
+| Scenario | Symptom | Metric footprint |
+|---|---|---|
+| `payment_gateway_timeout` | Checkout freezes after clicking Pay | payment p95 latency ≈ 5.3 s (+412 %), error rate 17 %, DB normal |
+| `db_pool_exhaustion` | Dashboard takes 30 s to load | DB connections 99/100, query p95 2.4 s, order-service p95 29 s |
+| `smtp_auth_failure` | HTTP 500 on password reset | notification error rate 58 %, auth-service error rate 4.5 % |
+
+→ [simulator/README.md](simulator/README.md)
+
 ## Repository structure
 
 ```
@@ -88,7 +109,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 2 | Problem definition | ✅ |
 | 3 | Architecture design | ✅ |
 | 4 | Repository structure | ✅ |
-| 5 | Enterprise application simulator | ⏳ |
+| 5 | Enterprise application simulator | ✅ |
 | 6 | Ticket management system | ⏳ |
 | 7 | Database design | ⏳ |
 | 8 | Authentication & RBAC | ⏳ |

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.auth.rate_limit import LoginThrottle, get_login_throttle
+from app.auth.rate_limit import LoginThrottle, get_login_throttle, get_redis
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
@@ -85,6 +85,7 @@ def client(session_factory, throttle) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = override
     app.dependency_overrides[get_login_throttle] = lambda: throttle
+    app.dependency_overrides[get_redis] = lambda: throttle.client
     yield TestClient(app)
     app.dependency_overrides.clear()
 

@@ -164,6 +164,31 @@ revokes every refresh token. Admins cannot delete, deactivate or demote themselv
 Demo accounts (password `opspilot-demo`): `nikos@opspilot.dev` (admin), `maria@opspilot.dev` and
 `alex@opspilot.dev` (engineer), `sam@opspilot.dev` (support agent), `viewer@opspilot.dev` (viewer).
 
+## Analyst dashboard
+
+A Next.js analyst UI in the spirit of Datadog / ServiceNow / PagerDuty: sign-in, a sidebar app shell that hides what
+your role cannot use, and five working screens — **Dashboard**, **Incidents**, **Tickets** (queue + detail with
+lifecycle actions, assignment, comments and timeline), **Services** and **Admin** (user management).
+
+The main dashboard answers "what is on fire right now?" at a glance:
+
+- **Active incidents by severity** (SEV1–SEV3), **resolved** count and **MTTR** for the last 30 days with the change
+  against the previous 30 days, open / unassigned / today's ticket counts.
+- **Active incident list** ordered by severity then age, with affected services, linked tickets and duration.
+- **Incident volume** (stacked by severity) and **ticket volume** for the last 30 days — hand-rolled SVG charts with
+  hover tooltips, no chart library.
+- **Service health** for the last 6 hours: status derived from error rate and p95 latency against the service's own
+  median baseline, an error-rate sparkline and the latency change in percent.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/dashboard/summary` | Everything the dashboard renders in one round trip — aggregated in SQL (`FILTER`, `date_bin`, `percentile_cont`) and cached in Redis for 15 s because every open dashboard polls it |
+| `GET` | `/api/v1/incidents?state=active\|resolved\|all&severity=&page=` | Incident list, active first |
+
+The cache fails open: if Redis is unavailable the summary is computed directly. The access token is kept in memory
+only (never `localStorage`); a page reload restores the session through the `HttpOnly` refresh cookie, and the
+Next.js server proxies `/api/*` so that cookie stays first-party.
+
 ## Repository structure
 
 ```
@@ -213,7 +238,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 6 | Ticket management system | ✅ |
 | 7 | Database design | ✅ |
 | 8 | Authentication & RBAC | ✅ |
-| 9 | Analyst dashboard | ⏳ |
+| 9 | Analyst dashboard | ✅ |
 | 10 | Incident investigation page | ⏳ |
 
 ## License

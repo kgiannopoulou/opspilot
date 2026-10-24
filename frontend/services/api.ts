@@ -60,6 +60,39 @@ export interface AdminUser {
   last_login_at: string | null; created_at: string;
 }
 
+export type EvidenceKind =
+  | "LOG_PATTERN" | "METRIC_DELTA" | "DEPENDENCY_HEALTH" | "SIMILAR_INCIDENT" | "DOCUMENT" | "CHANGE_EVENT";
+export type EvidenceStance = "SUPPORTS" | "CONTRADICTS" | "CONTEXT";
+
+export interface Evidence {
+  id: number; position: number; kind: EvidenceKind; stance: EvidenceStance; summary: string; weight: number;
+  data: Record<string, unknown>;
+  related_incident: { id: number; number: string; title: string } | null;
+  document: { id: number; slug: string; title: string; category: string } | null;
+}
+export interface Investigation {
+  id: number; status: "RUNNING" | "COMPLETED" | "FAILED"; engine: string; hypothesis_key: string | null;
+  root_cause: string | null; confidence: number | null; recommended_steps: string[]; suggested_sql: string | null;
+  window_start: string; window_end: string; error: string | null; duration_ms: number | null;
+  created_at: string; completed_at: string | null; requested_by: UserRef | null; evidence: Evidence[];
+}
+export interface LinkedTicket {
+  number: string; title: string; priority: Priority; status: TicketStatus; assignee: UserRef | null; created_at: string;
+}
+export interface IncidentDetail extends IncidentSummary {
+  summary: string; root_cause: string | null; signature: string | null; detected_at: string | null;
+  tickets: LinkedTicket[]; allowed_transitions: IncidentStatus[]; latest_investigation: Investigation | null;
+}
+export interface IncidentTelemetry {
+  window_start: string; window_end: string; incident_start: string;
+  series: { service: string; metric: string; points: { ts: string; value: number }[] }[];
+}
+export interface LogLine { ts: string; service: string; level: string; message: string; attributes: Record<string, unknown> }
+export interface KnowledgeDoc {
+  id: number; slug: string; title: string; category: "runbook" | "troubleshooting" | "architecture";
+  service: ServiceRef | null; tags: string[]; updated_at: string; content?: string;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }

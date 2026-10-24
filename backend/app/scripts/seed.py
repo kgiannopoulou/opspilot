@@ -8,6 +8,8 @@ What gets loaded:
   * 60 days of resolved incident history with linked (closed) tickets — trends, MTTR, similar incidents
   * the last 6 hours of simulated logs and metrics with three live incidents injected
   * the customer tickets those live incidents caused, plus an everyday backlog
+  * the knowledge base (runbooks, troubleshooting guides, architecture notes)
+  * completed investigations for two of the live incidents; the newest one is left for you to investigate
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ from app.repositories.observability import bulk_insert_logs, bulk_insert_metrics
 from app.repositories.tickets import TicketRepository
 from app.schemas.ticket import CommentCreate, TicketCreate, TicketTransition
 from app.services.incidents import IncidentService
+from app.services.investigations import InvestigationService
+from app.services.knowledge import load_knowledge_base
 from app.services.tickets import TicketService
 from simulator.engine import ScheduledIncident, simulate
 from simulator.incidents.scenarios import SCENARIOS
@@ -53,12 +57,13 @@ class LiveIncident:
     started_minutes_ago: int
     duration_minutes: int | None  # None = still ongoing
     status: IncidentStatus
+    investigated: bool  # pre-run the investigation engine so the demo opens with results
 
 
 LIVE_INCIDENTS = [
-    LiveIncident("db_pool_exhaustion", 150, 40, IncidentStatus.MONITORING),
-    LiveIncident("smtp_auth_failure", 18, None, IncidentStatus.INVESTIGATING),
-    LiveIncident("payment_gateway_timeout", 34, None, IncidentStatus.INVESTIGATING),
+    LiveIncident("db_pool_exhaustion", 150, 40, IncidentStatus.MONITORING, investigated=True),
+    LiveIncident("smtp_auth_failure", 18, None, IncidentStatus.INVESTIGATING, investigated=False),
+    LiveIncident("payment_gateway_timeout", 34, None, IncidentStatus.INVESTIGATING, investigated=True),
 ]
 
 
@@ -338,6 +343,8 @@ def seed_live(db: Session, now: datetime, users: dict[str, User], services: dict
         if live.status != IncidentStatus.INVESTIGATING:
             incident.status = live.status
             db.commit()
+        if live.investigated:
+            InvestigationService(db).run(incident, maria, now=now)
 
 
 def seed(db: Session, now: datetime | None = None) -> None:
@@ -346,6 +353,7 @@ def seed(db: Session, now: datetime | None = None) -> None:
     seed_history(db, now, users, services)
     for email, *_ in TEAM:
         db.refresh(users[email])
+    load_knowledge_base(db)
     seed_live(db, now, users, services)
     seed_backlog(db, users)
 

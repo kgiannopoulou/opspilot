@@ -77,3 +77,5 @@ class AIEvidence(Base):
     document_id: Mapped[int | None] = mapped_column(ForeignKey("knowledge_documents.id", ondelete="SET NULL"))
 
     investigation: Mapped[AIInvestigation] = relationship(back_populates="evidence")
+    related_incident: Mapped["Incident | None"] = relationship(lazy="joined")  # noqa: F821
+    document: Mapped["KnowledgeDocument | None"] = relationship(lazy="joined")  # noqa: F821

@@ -205,3 +205,71 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
     </div>
   );
 }
+
+/** Per-minute metric around an incident: one series, a dashed onset marker, the pre-incident baseline shaded. */
+export function IncidentSeries({ points, onset, label, format, height = 150 }: {
+  points: { ts: string; value: number }[]; onset: string; label: string;
+  format: (v: number) => string; height?: number;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  if (points.length < 2) return <div ref={ref} className="py-6 text-center text-xs text-slate-500">No data</div>;
+
+  const pad = { top: 10, right: 8, bottom: 20, left: 52 };
+  const t0 = new Date(points[0].ts).getTime();
+  const t1 = new Date(points[points.length - 1].ts).getTime();
+  const tOnset = new Date(onset).getTime();
+  const rawMax = Math.max(...points.map((p) => p.value));
+  const max = rawMax <= 1 && rawMax > 0 ? Math.min(1, niceMax(rawMax * 100) / 100) : niceMax(rawMax);
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const x = (t: number) => pad.left + ((t - t0) / Math.max(1, t1 - t0)) * plotW;
+  const y = (v: number) => pad.top + plotH - (v / max) * plotH;
+  const xs = points.map((p) => x(new Date(p.ts).getTime()));
+  const line = points.map((p, i) => `${i ? "L" : "M"}${xs[i]},${y(p.value)}`).join("");
+  const onsetX = Math.min(Math.max(x(tOnset), pad.left), width - pad.right);
+  const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+
+  const onMove = (e: React.MouseEvent<SVGRectElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const target = pad.left + ((e.clientX - box.left) / box.width) * plotW;
+    let best = 0;
+    xs.forEach((px, i) => { if (Math.abs(px - target) < Math.abs(xs[best] - target)) best = i; });
+    setHover(best);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <svg width={width} height={height} role="img" aria-label={`${label} per minute around the incident`}>
+        <rect x={pad.left} y={pad.top} width={Math.max(0, onsetX - pad.left)} height={plotH} fill={INK.grid} opacity={0.35} />
+        {[0, max / 2, max].map((t) => (
+          <g key={t}>
+            <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} stroke={t === 0 ? INK.axis : INK.grid} />
+            <text x={pad.left - 6} y={y(t) + 3} textAnchor="end" fontSize="10" fill={INK.muted}>{format(t)}</text>
+          </g>
+        ))}
+        <line x1={onsetX} x2={onsetX} y1={pad.top} y2={y(0)} stroke={SEVERITY_COLORS.SEV1} strokeWidth={1.5} strokeDasharray="4 3" />
+        <text x={onsetX + 4} y={pad.top + 9} fontSize="10" fill={INK.secondary}>onset</text>
+        <path d={line} fill="none" stroke={SERIES_BLUE} strokeWidth={2} strokeLinejoin="round" />
+        {[t0, tOnset, t1].filter((t, i, a) => i === 0 || Math.abs(x(t) - x(a[i - 1])) > 40).map((t) => (
+          <text key={t} x={x(t)} y={height - 5} fontSize="10" fill={INK.muted}
+            textAnchor={t === t0 ? "start" : t === t1 ? "end" : "middle"}>{hhmm(t)}</text>
+        ))}
+        {hover !== null && (
+          <g>
+            <line x1={xs[hover]} x2={xs[hover]} y1={pad.top} y2={y(0)} stroke={INK.secondary} strokeDasharray="3 3" />
+            <circle cx={xs[hover]} cy={y(points[hover].value)} r={4.5} fill={SERIES_BLUE} stroke="#0f172a" strokeWidth={2} />
+          </g>
+        )}
+        <rect x={pad.left} y={pad.top} width={plotW} height={plotH} fill="transparent" onMouseMove={onMove}
+          onMouseLeave={() => setHover(null)} />
+      </svg>
+      {hover !== null && (
+        <Tooltip x={xs[hover]} y={y(points[hover].value)} width={width}>
+          <div className="font-medium text-slate-100">{hhmm(new Date(points[hover].ts).getTime())} UTC</div>
+          <div className="flex justify-between text-slate-300"><span>{label}</span><span className="tabular-nums">{format(points[hover].value)}</span></div>
+        </Tooltip>
+      )}
+    </div>
+  );
+}

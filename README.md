@@ -170,6 +170,8 @@ A Next.js analyst UI in the spirit of Datadog / ServiceNow / PagerDuty: sign-in,
 your role cannot use, and five working screens — **Dashboard**, **Incidents**, **Tickets** (queue + detail with
 lifecycle actions, assignment, comments and timeline), **Services** and **Admin** (user management).
 
+![OpsPilot dashboard](docs/screenshots/dashboard.jpg)
+
 The main dashboard answers "what is on fire right now?" at a glance:
 
 - **Active incidents by severity** (SEV1–SEV3), **resolved** count and **MTTR** for the last 30 days with the change
@@ -188,6 +190,61 @@ The main dashboard answers "what is on fire right now?" at a glance:
 The cache fails open: if Redis is unavailable the summary is computed directly. The access token is kept in memory
 only (never `localStorage`); a page reload restores the session through the `HttpOnly` refresh cookie, and the
 Next.js server proxies `/api/*` so that cookie stays first-party.
+
+## Incident investigation
+
+The incident page is the showcase screen: everything an engineer needs to go from *"customers can't pay"* to a
+probable root cause, without opening five tools.
+
+![Incident investigation](docs/screenshots/incident-investigation.jpg)
+
+![Recommended steps, documentation and suggested SQL](docs/screenshots/incident-recommendations.jpg)
+
+**How the investigation engine works** ([`app/ai/engine.py`](backend/app/ai/engine.py), engine `rules-v1`):
+
+1. **Scope:** the affected services plus their direct dependencies, over a window starting at onset (capped at 60
+   minutes so a long-running incident is not polluted by later, unrelated ones). "Normal" is the 2 hours before onset.
+2. **Evidence collectors** query what is stored in PostgreSQL:
+   - *Logs:* WARN/ERROR lines grouped by service + message, compared with the baseline rate (new vs. pre-existing).
+   - *Metrics:* p90 during the incident vs. median baseline for latency, error rate, DB connections, query latency, CPU.
+   - *Dependency health:* a healthy dependency localises the fault (*"postgres-primary remains healthy"*); a sick one
+     **contradicts** the hypothesis and lowers confidence.
+   - *Change events:* config reloads, scheduled jobs and deployments in the 30 minutes before onset.
+   - *History:* resolved incidents with a matching error signature (*"Similar to INC-106, 41 days ago"*).
+   - *Knowledge base:* runbooks and guides whose tags match, cited as relevant documentation.
+3. **Hypotheses** ([`hypotheses.py`](backend/app/ai/hypotheses.py)) are proposed by log signatures and scored *only*
+   from the evidence: `confidence = (1 − Π(1 − w) over supporting) × Π(1 − w) over contradicting`, capped at 97 %.
+   The best-supported one wins. Root-cause text, steps and SQL are templates filled from real log attributes
+   (`provider=stripe`, `timeout=5000ms`), so they never state a value that is not in the data.
+4. Nothing matches? The result is an honest low-confidence *unknown* (≤ 35 %) naming the strongest new signal.
+
+Every run is stored as an immutable `ai_investigations` row with its ordered `ai_evidence` (stance, weight and the raw
+numbers in JSONB), audited, and shown in the UI with one click to see the data behind each claim. Results on the
+seeded scenarios:
+
+| Incident | Diagnosis | Confidence | Key evidence |
+|---|---|---|---|
+| Payment checkout timeout | Gateway exceeds the 5 s client timeout | ~80 % | 35 × `GatewayTimeoutException`, p95 +407 %, DB healthy, similar INC |
+| Merchant dashboard slow | DB connection pool exhaustion | ~94 % | `QueuePool limit`, DB connections 33 → 99, revenue-report job started 2 min before |
+| HTTP 500 on password reset | SMTP authentication failure | ~68 % | `SMTPAuthenticationError` (535), SMTP credentials reloaded 1 min before onset |
+
+The rest of the page: incident lifecycle actions (`INVESTIGATING → IDENTIFIED → MONITORING → RESOLVED`, resolving
+requires a root cause, *Accept as root cause* copies the AI finding), per-minute telemetry charts with the onset
+marked, linked customer tickets and a live tail of errors/warnings. The knowledge base (`knowledge-base/*.md`) is
+loaded idempotently by content hash and browsable at `/knowledge`.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/incidents/{number}` | Incident with linked tickets, allowed transitions and the latest investigation |
+| `POST` | `/api/v1/incidents/{number}/investigations` | Run the engine (`incidents:investigate` — engineers, admins) |
+| `GET` | `/api/v1/incidents/{number}/investigations` | Investigation history |
+| `POST` | `/api/v1/incidents/{number}/status` | Lifecycle transition (+ root cause) |
+| `GET` | `/api/v1/incidents/{number}/telemetry` | Metric series of affected services, 1 h before onset → now |
+| `GET` | `/api/v1/incidents/{number}/logs?limit=` | Recent WARN/ERROR lines since onset |
+| `GET` | `/api/v1/knowledge`, `/api/v1/knowledge/{slug}` | Knowledge base |
+
+The engine is deliberately LLM-free: it is deterministic, testable and fast (~20 ms). A later RAG step will use
+`pgvector` retrieval and an LLM to *summarise* the same stored evidence, never to add facts (ADR 0004).
 
 ## Repository structure
 
@@ -239,7 +296,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 7 | Database design | ✅ |
 | 8 | Authentication & RBAC | ✅ |
 | 9 | Analyst dashboard | ✅ |
-| 10 | Incident investigation page | ⏳ |
+| 10 | Incident investigation page | ✅ |
 
 ## License
 

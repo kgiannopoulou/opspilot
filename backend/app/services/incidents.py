@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -9,6 +9,18 @@ from app.models.enums import IncidentStatus, Severity, TicketEventType
 from app.repositories.tickets import TicketRepository
 from app.services import audit
 
+# Incident lifecycle. Moving backwards is allowed: a fix that does not hold sends the incident back to INVESTIGATING.
+INCIDENT_TRANSITIONS: dict[IncidentStatus, tuple[IncidentStatus, ...]] = {
+    IncidentStatus.INVESTIGATING: (IncidentStatus.IDENTIFIED, IncidentStatus.MONITORING, IncidentStatus.RESOLVED),
+    IncidentStatus.IDENTIFIED: (IncidentStatus.INVESTIGATING, IncidentStatus.MONITORING, IncidentStatus.RESOLVED),
+    IncidentStatus.MONITORING: (IncidentStatus.INVESTIGATING, IncidentStatus.RESOLVED),
+    IncidentStatus.RESOLVED: (IncidentStatus.INVESTIGATING,),
+}
+
+
+def allowed_incident_transitions(status: IncidentStatus) -> list[IncidentStatus]:
+    return list(INCIDENT_TRANSITIONS[status])
+
 
 class IncidentService:
     def __init__(self, db: Session) -> None:
@@ -18,6 +30,33 @@ class IncidentService:
         incident = self.db.scalar(select(Incident).where(Incident.number == number))
         if incident is None:
             raise NotFoundError(f"incident {number} not found")
+        return incident
+
+    def change_status(
+        self, number: str, status: IncidentStatus, actor: User, root_cause: str | None = None
+    ) -> Incident:
+        """Move an incident through its lifecycle. Resolving requires a root cause (given now or recorded earlier)."""
+        incident = self.db.scalar(select(Incident).where(Incident.number == number).with_for_update(of=Incident))
+        if incident is None:
+            raise NotFoundError(f"incident {number} not found")
+        if status not in INCIDENT_TRANSITIONS[incident.status]:
+            raise ConflictError(f"cannot move incident from {incident.status} to {status}")
+        if root_cause is not None and root_cause.strip():
+            incident.root_cause = root_cause.strip()
+        if status == IncidentStatus.RESOLVED and not incident.root_cause:
+            raise ValidationFailed("a root cause is required to resolve an incident")
+        previous = incident.status
+        incident.status = status
+        incident.resolved_at = datetime.now(UTC) if status == IncidentStatus.RESOLVED else None
+        audit.record(
+            self.db,
+            actor,
+            "incident.status_changed",
+            "incident",
+            incident.number,
+            {"from": previous.value, "to": status.value, "root_cause": incident.root_cause},
+        )
+        self.db.commit()
         return incident
 
     def _next_number(self) -> str:

@@ -11,3 +11,4 @@ bcrypt==5.0.0
 redis==8.1.0
 pgvector==0.5.1
 anthropic==2.3.0
+sqlglot==30.24.0

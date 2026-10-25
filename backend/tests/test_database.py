@@ -32,7 +32,12 @@ NOW = datetime(2026, 10, 22, 14, 27, tzinfo=UTC)
 
 def test_models_match_migrations(engine):
     with engine.connect() as conn:
-        diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
+        # include the shopstream sandbox schema; skip PostgreSQL's own schemas
+        opts = {
+            "include_schemas": True,
+            "include_name": lambda name, type_, _: type_ != "schema" or name in (None, "public", "shopstream"),
+        }
+        diff = compare_metadata(MigrationContext.configure(conn, opts=opts), Base.metadata)
     assert diff == []
 
 

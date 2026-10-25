@@ -25,8 +25,10 @@ from app.schemas.incident import (
     MetricPoint,
     MetricSeries,
 )
+from app.schemas.queries import QueryRunOut, RunQuery
 from app.services.incidents import IncidentService, allowed_incident_transitions
 from app.services.investigations import InvestigationService
+from app.services.queries import QueryService
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -118,6 +120,21 @@ def run_investigation(number: str, db: DB, user: Investigator) -> InvestigationO
     """Collect evidence from logs, metrics, past incidents and runbooks, then score known failure modes."""
     incident = IncidentService(db).get(number)
     return InvestigationOut.model_validate(InvestigationService(db).run(incident, user))
+
+
+@router.post(
+    "/{number}/investigations/{investigation_id}/queries/{query_id}/run",
+    response_model=QueryRunOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def run_query(
+    number: str, investigation_id: int, query_id: int, data: RunQuery, db: DB, user: Investigator
+) -> QueryRunOut:
+    """Run a proposed (optionally edited) query in the read-only sandbox. Re-validated on every run; audited."""
+    incident = IncidentService(db).get(number)
+    service = QueryService(db)
+    return QueryRunOut.model_validate(service.run(incident, service.get(incident, investigation_id, query_id), user,
+                                                  data.sql))  # fmt: skip
 
 
 def _window(db: Session, incident: Incident) -> tuple[datetime, datetime]:

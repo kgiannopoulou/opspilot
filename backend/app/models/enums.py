@@ -56,6 +56,17 @@ class ClassificationStatus(StrEnum):
     SUPERSEDED = "SUPERSEDED"  # replaced by a newer suggestion before anyone reviewed it
 
 
+class QueryRisk(StrEnum):
+    READ_ONLY = "READ_ONLY"  # passed every check; may be run by an engineer
+    BLOCKED = "BLOCKED"  # violates a rule; shown for transparency, never executed
+
+
+class QueryRunStatus(StrEnum):
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"  # valid SQL that errored or timed out in the sandbox
+    REJECTED = "REJECTED"  # refused by the validator at run time (e.g. an edited query)
+
+
 class Severity(StrEnum):
     SEV1 = "SEV1"  # critical: core flow down for many customers
     SEV2 = "SEV2"  # major: degraded core flow or full outage of a secondary one

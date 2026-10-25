@@ -86,3 +86,18 @@ def test_unknown_scenario_rejected() -> None:
 def test_dependents() -> None:
     assert dependents_of("payment-service") == ["order-service"]
     assert "auth-service" in dependents_of("postgres-primary")
+
+
+def test_app_data_matches_the_logs() -> None:
+    from simulator.app_data import derive_app_data
+
+    result = simulate(START, END, [_incident(), _incident("smtp_auth_failure")], seed=3)
+    data = derive_app_data(result.logs)
+    timeouts = [p for p in data["payments"] if p["status"] == "TIMEOUT"]
+    timeout_logs = [log for log in result.logs if log.message == "GatewayTimeoutException"]
+    assert len(timeouts) == len(timeout_logs) > 0
+    assert all(p["gateway_ms"] == 5000 for p in timeouts)
+    failed_orders = {o["id"] for o in data["orders"] if o["status"] == "PAYMENT_FAILED"}
+    assert {p["order_id"] for p in timeouts} <= failed_orders
+    failed_resets = [r for r in data["password_reset_requests"] if r["status"] == "FAILED"]
+    assert failed_resets and all(r["error"] == "NotificationDeliveryError" for r in failed_resets)

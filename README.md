@@ -374,6 +374,46 @@ order-service      dependent   ! anomalous   19 × Payment failed (new)
 | `GET` | `/api/v1/tickets/{number}/correlation` | Per-service log patterns and metric deltas around the ticket, suspected incident |
 | `POST` | `/api/v1/incidents/{number}/tickets` | Link a ticket to an incident (`incidents:investigate`) |
 
+## Investigation queries (AI-generated SQL, safely)
+
+Each investigation proposes diagnostic queries against the ShopStream application database — never against
+OpsPilot's own — with the reason to run them:
+
+```
+AI GENERATED QUERY                                   🔒 READ ONLY
+Payment outcomes during the incident
+Why: Confirms that payments fail as TIMEOUT (gateway) rather than DECLINED (issuer), and sizes the impact.
+
+SELECT status, COUNT(*) AS payments, ROUND(AVG(gateway_ms)) AS avg_gateway_ms
+FROM payments
+WHERE created_at BETWEEN '2026-10-25T09:06:00+00:00' AND '2026-10-25T09:40:00+00:00'
+GROUP BY status ORDER BY payments DESC;                                    [Run query] [Edit]
+```
+
+Queries come from the matched hypothesis (curated templates, filled with the investigation window so a re-run
+returns the same rows) and, with an LLM configured, from the model, which receives the schema and the evidence. **No
+proposal is executed automatically.** An engineer runs it, optionally after editing it, and the result table appears
+in place. Defense in depth ([ADR 0006](docs/decisions/0006-ai-generated-sql-safety.md)):
+
+| Layer | Where | What it stops |
+|---|---|---|
+| Permission + audit | API | Only `incidents:investigate`; every run (and every refusal) is an audit event with the SQL |
+| AST validator | [`sql_guard.py`](backend/app/ai/sql_guard.py) (sqlglot) | Anything but one SELECT; INSERT/UPDATE/DELETE/DDL/COPY/SET anywhere in the tree; `SELECT … INTO`; `FOR UPDATE`; tables outside the allowlist (`payments`, `orders`, `password_reset_requests`, `pg_stat_activity`); functions outside the allowlist (`pg_sleep`, `pg_read_file`, `dblink`, `set_config`, …); adds/lowers `LIMIT 200` |
+| Re-validation | [`services/queries.py`](backend/app/services/queries.py) | Stored verdicts and edited SQL are never trusted — validated again at run time |
+| Read-only transaction | PostgreSQL | `SET TRANSACTION READ ONLY`: the database refuses writes even if the validator had a bug |
+| Least privilege | PostgreSQL | `SET LOCAL ROLE opspilot_readonly`: can read the `shopstream` schema, gets *permission denied* on `users`, `tickets`, … |
+| Resource limits | PostgreSQL | `statement_timeout` 3 s, `lock_timeout` 1 s, at most 200 rows fetched |
+| No side effects | Connection | Separate connection, transaction always rolled back |
+
+The tests include a "validator bypassed" fixture that disables the first layers and asserts the database layers still
+refuse `DELETE`, `UPDATE` and reading password hashes, and cancel `pg_sleep`. LLM proposals that fail validation are
+stored as **BLOCKED** with their violations and shown, not hidden — a useful signal when evaluating a model.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/v1/incidents/{n}/investigations/{id}/queries/{qid}/run` | Run a proposal (body `{"sql": ...}` to run an edited version) |
+| `POST` | `/api/v1/sql/validate` | Dry-run the safety checks, used for live feedback while editing |
+
 ## Repository structure
 
 ```
@@ -429,6 +469,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 12 | Evidence citations and grounding check | ✅ |
 | 13 | AI ticket classification with human review | ✅ |
 | 14 | Automatic log & metric correlation for tickets | ✅ |
+| 15 | AI-generated investigation queries with a SQL safety layer | ✅ |
 
 ## License
 

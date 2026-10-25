@@ -94,6 +94,18 @@ export interface Evidence {
   related_incident: { id: number; number: string; title: string } | null;
   document: { id: number; slug: string; title: string; category: string } | null;
 }
+export interface QueryRun {
+  id: number; sql: string; edited: boolean; status: "SUCCEEDED" | "FAILED" | "REJECTED"; columns: string[];
+  rows: unknown[][]; row_count: number; truncated: boolean; duration_ms: number | null; error: string | null;
+  executed_by: UserRef | null; executed_at: string;
+}
+export interface InvestigationQuery {
+  id: number; position: number; title: string; purpose: string; sql: string; safe_sql: string | null; source: string;
+  risk: "READ_ONLY" | "BLOCKED"; violations: string[]; tables: string[]; last_run: QueryRun | null;
+}
+export interface SqlVerdict {
+  ok: boolean; risk: "READ_ONLY" | "BLOCKED"; safe_sql: string | null; violations: string[]; tables: string[];
+}
 export interface GroundingCheck {
   passed: boolean; cited: string[]; unknown_refs: string[]; uncited_sentences: string[]; unsupported_numbers: string[];
 }
@@ -106,6 +118,7 @@ export interface Investigation {
   confidence: number | null; recommended_steps: string[]; suggested_sql: string | null;
   window_start: string; window_end: string; error: string | null; grounding: Grounding; duration_ms: number | null;
   created_at: string; completed_at: string | null; requested_by: UserRef | null; evidence: Evidence[];
+  queries: InvestigationQuery[];
 }
 export interface LinkedTicket {
   number: string; title: string; priority: Priority; status: TicketStatus; assignee: UserRef | null; created_at: string;

@@ -6,7 +6,8 @@
 What gets loaded:
   * roles + a five-person support team, the service catalogue and its dependency graph
   * 60 days of resolved incident history with linked (closed) tickets — trends, MTTR, similar incidents
-  * the last 6 hours of simulated logs and metrics with three live incidents injected
+  * the last 6 hours of simulated logs and metrics with three live incidents injected, plus the ShopStream
+    orders/payments/password-reset rows those logs describe (the read-only sandbox for investigation queries)
   * the customer tickets those live incidents caused, plus an everyday backlog
   * the knowledge base (runbooks, troubleshooting guides, architecture notes)
   * completed investigations for two of the live incidents; the newest one is left for you to investigate
@@ -27,7 +28,7 @@ from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.models import Base, Incident, IncidentTicket, Role, Service, Ticket, TicketEvent, User
 from app.models.enums import IncidentStatus, Priority, Severity, TicketCategory, TicketSource, TicketStatus
-from app.repositories.observability import bulk_insert_logs, bulk_insert_metrics
+from app.repositories.observability import bulk_insert_app_data, bulk_insert_logs, bulk_insert_metrics
 from app.repositories.tickets import TicketRepository
 from app.schemas.ticket import CommentCreate, TicketCreate, TicketTransition
 from app.services.classification import ClassificationService
@@ -35,6 +36,7 @@ from app.services.incidents import IncidentService
 from app.services.investigations import InvestigationService
 from app.services.knowledge import load_knowledge_base
 from app.services.tickets import TicketService
+from simulator.app_data import derive_app_data
 from simulator.engine import ScheduledIncident, simulate
 from simulator.incidents.scenarios import SCENARIOS
 from simulator.topology import SERVICES
@@ -176,7 +178,11 @@ SEVERITY_TO_PRIORITY = {Severity.SEV1: Priority.P1, Severity.SEV2: Priority.P2, 
 
 
 def reset(db: Session) -> None:
-    tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables if t.name not in REFERENCE_TABLES)
+    tables = ", ".join(
+        f'"{t.schema}"."{t.name}"' if t.schema else f'"{t.name}"'
+        for t in Base.metadata.sorted_tables
+        if t.name not in REFERENCE_TABLES
+    )
     db.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     db.execute(text("ALTER SEQUENCE ticket_number_seq RESTART"))
     db.execute(text("ALTER SEQUENCE incident_number_seq RESTART"))
@@ -305,6 +311,7 @@ def seed_live(db: Session, now: datetime, users: dict[str, User], services: dict
     service_ids = {name: svc.id for name, svc in services.items()}
     bulk_insert_logs(db, result.logs, service_ids)
     bulk_insert_metrics(db, result.metrics, service_ids)
+    bulk_insert_app_data(db, derive_app_data(result.logs))  # the ShopStream tables investigation queries read
     db.commit()
 
     tickets, incidents = TicketService(db), IncidentService(db)

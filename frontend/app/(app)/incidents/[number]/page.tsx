@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import { IncidentSeries } from "@/components/charts";
+import { InvestigationQueries } from "@/components/InvestigationQueries";
 import {
   Card, ErrorBox, PriorityBadge, SeverityBadge, Spinner, StatusBadge, formatDuration, relativeTime, utcDateTime, utcTime,
 } from "@/components/ui";
@@ -136,19 +137,9 @@ function EvidenceRow({ e }: { e: Evidence }) {
   );
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={async () => { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-      className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800">
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
-}
-
-function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
-  inv: Investigation | null; canInvestigate: boolean; running: boolean; onRun: () => void; onAccept: (rootCause: string) => void;
+function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRun, onAccept }: {
+  incidentNumber: string; inv: Investigation | null; canInvestigate: boolean; running: boolean; onRun: () => void;
+  onAccept: (rootCause: string) => void;
 }) {
   const runButton = canInvestigate && (
     <button onClick={onRun} disabled={running}
@@ -260,15 +251,7 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
         </div>
       </div>
 
-      {inv.suggested_sql && (
-        <div className="mt-6">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Suggested SQL</div>
-            <CopyButton text={inv.suggested_sql} />
-          </div>
-          <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs leading-relaxed text-emerald-200">{inv.suggested_sql}</pre>
-        </div>
-      )}
+      <InvestigationQueries incident={incidentNumber} investigationId={inv.id} queries={inv.queries} canRun={canInvestigate} />
 
       <div className="mt-5 border-t border-slate-800 pt-3 text-[11px] text-slate-500">
         Engine <span className="font-mono">{inv.engine}</span> · window {utcTime(inv.window_start)}–{utcTime(inv.window_end)} ·
@@ -369,7 +352,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-5">
-          <InvestigationPanel inv={inv} canInvestigate={canInvestigate} running={running} onRun={runInvestigation}
+          <InvestigationPanel incidentNumber={i.number} inv={inv} canInvestigate={canInvestigate} running={running} onRun={runInvestigation}
             onAccept={(rc) => changeStatus("IDENTIFIED", rc)} />
 
           <Card title="Telemetry · affected services">

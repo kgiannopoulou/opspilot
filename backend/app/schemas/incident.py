@@ -15,6 +15,7 @@ from app.models.enums import (
     TicketStatus,
 )
 from app.schemas.common import ORMModel, ServiceRef, UserRef
+from app.schemas.queries import QueryOut
 
 
 class IncidentSummary(ORMModel):
@@ -94,6 +95,7 @@ class InvestigationOut(ORMModel):
     completed_at: datetime | None
     requested_by: UserRef | None
     evidence: list[EvidenceOut]
+    queries: list[QueryOut] = []
 
 
 class LinkedTicket(ORMModel):

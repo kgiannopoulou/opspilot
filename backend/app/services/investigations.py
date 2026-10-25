@@ -5,16 +5,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.engine import ENGINE_VERSION, InvestigationEngine
+from app.ai.llm import get_llm
+from app.ai.query_planner import QueryPlanner
 from app.ai.writer import Writer, get_writer
-from app.models import AIEvidence, AIInvestigation, Incident, User
-from app.models.enums import InvestigationStatus
+from app.models import AIEvidence, AIInvestigation, Incident, InvestigationQuery, User
+from app.models.enums import InvestigationStatus, QueryRisk
 from app.services import audit
 
 
 class InvestigationService:
-    def __init__(self, db: Session, writer: Writer | None = None) -> None:
+    def __init__(self, db: Session, writer: Writer | None = None, planner: QueryPlanner | None = None) -> None:
         self.db = db
         self.writer = writer
+        self.planner = planner
 
     def latest(self, incident: Incident) -> AIInvestigation | None:
         return self.db.scalar(
@@ -50,6 +53,7 @@ class InvestigationService:
         try:
             result = InvestigationEngine(self.db).investigate(incident)
             draft = writer.write(incident, result)
+            proposals = (self.planner or QueryPlanner(get_llm())).plan(incident, result)
         except Exception as exc:  # noqa: BLE001 — persisted for the analyst, then re-raised below
             self.db.rollback()
             run.status = InvestigationStatus.FAILED
@@ -85,6 +89,20 @@ class InvestigationService:
                 chunk_id=e.chunk_id,
             )
             for i, e in enumerate(result.evidence)
+        ]
+        run.queries = [
+            InvestigationQuery(
+                position=i,
+                title=p.title,
+                purpose=p.purpose,
+                sql=p.sql,
+                safe_sql=p.verdict.safe_sql,
+                source=p.source[:64],
+                risk=QueryRisk.READ_ONLY if p.verdict.ok else QueryRisk.BLOCKED,
+                violations=p.verdict.violations,
+                tables=p.verdict.tables,
+            )
+            for i, p in enumerate(proposals)
         ]
         run.duration_ms = round((time.perf_counter() - started) * 1000)
         run.completed_at = datetime.now(UTC)

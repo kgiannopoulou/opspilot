@@ -62,6 +62,9 @@ class AIInvestigation(Base):
     evidence: Mapped[list["AIEvidence"]] = relationship(
         back_populates="investigation", order_by="AIEvidence.position", cascade="all, delete-orphan"
     )
+    queries: Mapped[list["InvestigationQuery"]] = relationship(  # noqa: F821
+        order_by="InvestigationQuery.position", cascade="all, delete-orphan"
+    )
 
 
 class AIEvidence(Base):

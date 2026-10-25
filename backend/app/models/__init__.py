@@ -7,6 +7,7 @@ from app.models.incident import Incident, IncidentTicket, incident_services
 from app.models.investigation import AIEvidence, AIInvestigation
 from app.models.knowledge import DocumentChunk, KnowledgeDocument
 from app.models.observability import ApplicationLog, MetricSample
+from app.models.queries import InvestigationQuery, QueryRun, shop_orders, shop_password_resets, shop_payments
 from app.models.service import Service, service_dependencies
 from app.models.ticket import Ticket, TicketComment, TicketEvent
 from app.models.user import RefreshToken, Role, User
@@ -19,9 +20,11 @@ __all__ = [
     "Base",
     "DocumentChunk",
     "Incident",
+    "InvestigationQuery",
     "IncidentTicket",
     "KnowledgeDocument",
     "MetricSample",
+    "QueryRun",
     "RefreshToken",
     "Role",
     "Service",
@@ -31,5 +34,8 @@ __all__ = [
     "TicketEvent",
     "User",
     "incident_services",
+    "shop_orders",
+    "shop_password_resets",
+    "shop_payments",
     "service_dependencies",
 ]

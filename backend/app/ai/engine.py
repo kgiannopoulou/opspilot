@@ -20,7 +20,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.ai.hypotheses import CHANGE_MARKERS, HYPOTHESES, UNKNOWN_STEPS, Hypothesis
+from app.ai.hypotheses import CHANGE_MARKERS, HYPOTHESES, UNKNOWN_STEPS, Hypothesis, QueryTemplate
 from app.ai.retrieval import KnowledgeRetriever, build_query
 from app.models import Incident, Service
 from app.models.enums import EvidenceKind, EvidenceStance
@@ -86,11 +86,12 @@ class InvestigationResult:
     root_cause: str
     confidence: float
     recommended_steps: list[str]
-    suggested_sql: str | None
+    suggested_sql: str | None  # the first proposed query (kept for API compatibility)
     evidence: list[Evidence]
     window_start: datetime
     window_end: datetime
     search_query: str | None = None
+    queries: list[QueryTemplate] = field(default_factory=list)  # filled templates, validated before storage
 
 
 class _Defaults(dict[str, Any]):
@@ -384,16 +385,20 @@ class InvestigationEngine:
         ]
         values = {**pattern.sample, "service": pattern.service, "count": pattern.count,
                   "minutes": math.ceil(ctx.minutes)}  # fmt: skip
+        window = {"start": ctx.start.isoformat(timespec="seconds"), "end": ctx.end.isoformat(timespec="seconds"),
+                  "lookback": (ctx.start - CHANGE_LOOKBACK).isoformat(timespec="seconds")}  # fmt: skip
+        queries = [QueryTemplate(q.title, q.purpose, _fill(q.sql, window)) for q in hyp.queries]
         return InvestigationResult(
             hypothesis_key=hyp.key,
             root_cause=_fill(hyp.root_cause, values),
             confidence=score(evidence),
             recommended_steps=[_fill(s, values) for s in hyp.steps],
-            suggested_sql=_fill(hyp.suggested_sql, values) if hyp.suggested_sql else None,
+            suggested_sql=queries[0].sql if queries else None,
             evidence=evidence,
             window_start=ctx.start,
             window_end=ctx.end,
             search_query=query,
+            queries=queries,
         )
 
     def _unknown(self, ctx: _Context) -> InvestigationResult:

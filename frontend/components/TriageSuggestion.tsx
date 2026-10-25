@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, ErrorBox, PriorityBadge, relativeTime } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { post, type Classification, type Priority, type ServiceOut, type TicketCategory } from "@/services/api";
@@ -33,8 +33,18 @@ function Field({ name, predicted, final }: { name: string; predicted: React.Reac
 interface Correction { category: TicketCategory; priority: Priority; service: string; note: string }
 
 /** AI triage suggestion for a ticket. Nothing is applied until an analyst accepts or corrects it. */
-export function TriageSuggestion({ number, canWrite, onChanged }: { number: string; canWrite: boolean; onChanged: () => void }) {
-  const suggestion = useApi<Classification | null>(`/tickets/${number}/classification`);
+export function TriageSuggestion({ number, createdAt, canWrite, onChanged }: {
+  number: string; createdAt: string; canWrite: boolean; onChanged: () => void;
+}) {
+  // A new ticket is triaged by the background worker: poll briefly until its suggestion appears.
+  const [waiting, setWaiting] = useState(() => Date.now() - new Date(createdAt).getTime() < 120_000);
+  const suggestion = useApi<Classification | null>(`/tickets/${number}/classification`, { pollMs: waiting ? 1_500 : undefined });
+  if (waiting && suggestion.data) setWaiting(false);
+  useEffect(() => {
+    if (!waiting) return;
+    const id = setTimeout(() => setWaiting(false), Math.max(0, 120_000 - (Date.now() - new Date(createdAt).getTime())));
+    return () => clearTimeout(id);
+  }, [waiting, createdAt]);
   const services = useApi<ServiceOut[]>(canWrite ? "/services" : null);
   const [form, setForm] = useState<Correction | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,7 +66,15 @@ export function TriageSuggestion({ number, canWrite, onChanged }: { number: stri
   if (!c) {
     return (
       <Card title="AI triage" action={rerun}>
-        <p className="text-sm text-slate-500">{suggestion.loading ? "Loading…" : "No suggestion for this ticket yet."}</p>
+        {waiting ? (
+          <div>
+            <div className="text-sm text-slate-300">AI triage running in the background…</div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-sky-400" />
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">Correlating logs and metrics, then classifying. The ticket was saved immediately.</p>
+          </div>
+        ) : <p className="text-sm text-slate-500">{suggestion.loading ? "Loading…" : "No suggestion for this ticket yet."}</p>}
       </Card>
     );
   }

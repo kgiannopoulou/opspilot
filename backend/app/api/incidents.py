@@ -1,12 +1,14 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, status
+import redis
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import require
 from app.auth.permissions import Permission
+from app.auth.rate_limit import get_redis
 from app.core.database import get_db
 from app.models import Incident, User
 from app.models.enums import IncidentStatus, Severity
@@ -29,6 +31,7 @@ from app.schemas.queries import QueryRunOut, RunQuery
 from app.services.incidents import IncidentService, allowed_incident_transitions
 from app.services.investigations import InvestigationService
 from app.services.queries import QueryService
+from app.workers.jobs import JobService
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -115,11 +118,28 @@ def list_investigations(number: str, db: DB, _: Reader) -> list[InvestigationOut
     return [InvestigationOut.model_validate(i) for i in InvestigationService(db).history(incident)]
 
 
-@router.post("/{number}/investigations", response_model=InvestigationOut, status_code=status.HTTP_201_CREATED)
-def run_investigation(number: str, db: DB, user: Investigator) -> InvestigationOut:
-    """Collect evidence from logs, metrics, past incidents and runbooks, then score known failure modes."""
+@router.post("/{number}/investigations", response_model=InvestigationOut, status_code=status.HTTP_202_ACCEPTED)
+def run_investigation(
+    number: str,
+    db: DB,
+    user: Investigator,
+    background: BackgroundTasks,
+    client: Annotated[redis.Redis, Depends(get_redis)],
+) -> InvestigationOut:
+    """Queue an investigation and return at once (202). A worker collects evidence from logs, metrics, history and
+    runbooks, writes the cited summary and proposes queries; poll GET .../investigations/{id} for progress."""
     incident = IncidentService(db).get(number)
-    return InvestigationOut.model_validate(InvestigationService(db).run(incident, user))
+    run = InvestigationService(db).request(incident, user)
+    JobService(db, client).submit("incident.investigate", "investigation", run.id, {"investigation_id": run.id},
+                                  background)  # fmt: skip
+    db.refresh(run)
+    return InvestigationOut.model_validate(run)
+
+
+@router.get("/{number}/investigations/{investigation_id}", response_model=InvestigationOut)
+def get_investigation(number: str, investigation_id: int, db: DB, _: Reader) -> InvestigationOut:
+    incident = IncidentService(db).get(number)
+    return InvestigationOut.model_validate(InvestigationService(db).get(incident, investigation_id))
 
 
 @router.post(

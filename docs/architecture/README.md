@@ -9,8 +9,9 @@
 | **Analyst UI** | Next.js (App Router), TypeScript, Tailwind CSS | Dashboard, ticket queue, incident workspace. Talks to the API through a same-origin `/api` rewrite so the refresh-token cookie stays first-party. |
 | **Backend API** | FastAPI, SQLAlchemy 2, Pydantic 2 | Authentication, RBAC, ticket lifecycle, incident management, investigation orchestration, audit log. |
 | **PostgreSQL** | PostgreSQL 16 + `pgvector` | System of record: users, tickets, incidents, services, logs, metrics, knowledge base, investigations, audit events. |
-| **Redis** | Redis 7 | Short-lived state: dashboard cache, login rate limiting; later background jobs. |
-| **Investigation engine** | Python package `backend/app/ai` | Collects evidence (log signatures, metric deltas, dependency health, similar incidents), scores hypotheses, produces an evidence-backed report. Designed so an LLM/RAG layer can be added on top without changing the evidence model. |
+| **Redis** | Redis 7 | Short-lived state: dashboard cache, login rate limiting, and the background job queue (Redis Streams). |
+| **Worker** | Python process | Runs AI triage and investigations off the request path (`python -m app.workers.main`). |
+| **Investigation engine** | Python package `backend/app/ai` | Collects evidence (log signatures, metric deltas, dependency health, similar incidents), scores hypotheses, produces an evidence-backed report; retrieves runbook passages from pgvector (RAG), writes a cited summary (Claude or extractive) that must pass a grounding check, classifies tickets and proposes read-only SQL. |
 | **Simulator** | Python package `simulator/` | Generates a realistic ShopStream environment — five services, logs and metrics, with injectable incident scenarios. |
 
 ## Backend layering

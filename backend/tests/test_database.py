@@ -22,6 +22,7 @@ from app.models import (
     Service,
     service_dependencies,
 )
+from app.models.base import include_name
 from app.models.enums import DocumentCategory, Severity
 from app.schemas.ticket import TicketCreate
 from app.services.incidents import IncidentService
@@ -32,11 +33,7 @@ NOW = datetime(2026, 10, 22, 14, 27, tzinfo=UTC)
 
 def test_models_match_migrations(engine):
     with engine.connect() as conn:
-        # include the shopstream sandbox schema; skip PostgreSQL's own schemas
-        opts = {
-            "include_schemas": True,
-            "include_name": lambda name, type_, _: type_ != "schema" or name in (None, "public", "shopstream"),
-        }
+        opts = {"include_schemas": True, "include_name": include_name}  # same scope as autogenerate
         diff = compare_metadata(MigrationContext.configure(conn, opts=opts), Base.metadata)
     assert diff == []
 

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { IncidentSeries } from "@/components/charts";
+import { InvestigationProgress } from "@/components/InvestigationProgress";
 import { InvestigationQueries } from "@/components/InvestigationQueries";
 import {
   Card, ErrorBox, PriorityBadge, SeverityBadge, Spinner, StatusBadge, formatDuration, relativeTime, utcDateTime, utcTime,
@@ -144,7 +145,7 @@ function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRu
   const runButton = canInvestigate && (
     <button onClick={onRun} disabled={running}
       className="rounded-md bg-sky-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-60">
-      {running ? "Investigating…" : inv ? "Re-run investigation" : "Run investigation"}
+      {running ? "Queuing…" : inv ? "Re-run investigation" : "Run investigation"}
     </button>
   );
 
@@ -160,6 +161,9 @@ function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRu
         </div>
       </Card>
     );
+  }
+  if (inv.status === "QUEUED" || inv.status === "RUNNING") {
+    return <Card title="AI investigation"><InvestigationProgress inv={inv} /></Card>;
   }
   if (inv.status === "FAILED") {
     return <Card title="AI investigation" action={runButton}><ErrorBox message={`Investigation failed: ${inv.error}`} /></Card>;
@@ -193,10 +197,10 @@ function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRu
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Sources</div>
           <ul className="space-y-1">
             {sources.map((e) => (
-              <li key={e.ref} className="flex items-baseline gap-2 text-xs">
+              <li key={e.ref} className="flex min-w-0 items-baseline gap-2 text-xs">
                 <Cite refs={[e.ref]} />
                 <span className="text-slate-400">{KIND_LABEL[e.kind]}</span>
-                <span className="truncate text-slate-300">{e.summary}</span>
+                <span className="min-w-0 truncate text-slate-300">{e.summary}</span>
               </li>
             ))}
           </ul>
@@ -273,6 +277,14 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
   const [rootCause, setRootCause] = useState("");
   const [error, setError] = useState<string | null>(null);
   const canInvestigate = can("incidents:investigate");
+  // While an investigation is queued or running, poll it every second; reload the incident when it finishes.
+  const latest = incident.data?.latest_investigation;
+  const activeId = latest && (latest.status === "QUEUED" || latest.status === "RUNNING") ? latest.id : null;
+  const live = useApi<Investigation>(activeId ? `/incidents/${number}/investigations/${activeId}` : null, { pollMs: 1_000 });
+  const liveStatus = live.data?.id === activeId ? live.data?.status : undefined;
+  useEffect(() => {
+    if (liveStatus === "COMPLETED" || liveStatus === "FAILED") void incident.reload();
+  }, [liveStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function act(fn: () => Promise<unknown>) {
     setError(null);
@@ -288,7 +300,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
   if (incident.loading && !incident.data) return <Spinner />;
   if (incident.error && !incident.data) return <ErrorBox message={incident.error} />;
   const i = incident.data!;
-  const inv = i.latest_investigation;
+  const inv = activeId && live.data?.id === activeId ? live.data : i.latest_investigation;
   const primary = i.primary_service?.name;
   const charts = (telemetry.data?.series ?? [])
     .filter((s) => METRIC_LABEL[s.metric])
@@ -350,7 +362,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-5">
           <InvestigationPanel incidentNumber={i.number} inv={inv} canInvestigate={canInvestigate} running={running} onRun={runInvestigation}
             onAccept={(rc) => changeStatus("IDENTIFIED", rc)} />

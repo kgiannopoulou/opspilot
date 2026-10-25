@@ -90,6 +90,9 @@ class InvestigationOut(ORMModel):
     window_end: datetime
     error: str | None
     grounding: dict[str, Any]
+    progress: list[dict[str, Any]] = []
+    attempts: int = 0
+    started_at: datetime | None = None
     duration_ms: int | None
     created_at: datetime
     completed_at: datetime | None

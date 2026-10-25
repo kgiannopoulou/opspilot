@@ -113,12 +113,13 @@ export interface Grounding extends Partial<GroundingCheck> {
   rejected_llm_draft?: GroundingCheck; llm_error?: string;
 }
 export interface Investigation {
-  id: number; status: "RUNNING" | "COMPLETED" | "FAILED"; engine: string; hypothesis_key: string | null;
+  id: number; status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED"; engine: string; hypothesis_key: string | null;
   root_cause: string | null; narrative: string | null; search_query: string | null;
   confidence: number | null; recommended_steps: string[]; suggested_sql: string | null;
   window_start: string; window_end: string; error: string | null; grounding: Grounding; duration_ms: number | null;
   created_at: string; completed_at: string | null; requested_by: UserRef | null; evidence: Evidence[];
-  queries: InvestigationQuery[];
+  queries: InvestigationQuery[]; attempts: number; started_at: string | null;
+  progress: { key: string; label: string; status: "pending" | "running" | "done" | "failed"; started_at: string | null; finished_at: string | null }[];
 }
 export interface LinkedTicket {
   number: string; title: string; priority: Priority; status: TicketStatus; assignee: UserRef | null; created_at: string;
@@ -142,6 +143,16 @@ export interface SearchHit {
   similarity: number; score: number;
 }
 export interface SearchResults { query: string; embedding_model: string; hits: SearchHit[] }
+
+export interface BackgroundJob {
+  id: string; type: string; status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "RETRYING" | "DEAD"; entity_type: string;
+  entity_id: string; payload: Record<string, unknown>; attempts: number; error: string | null; worker: string | null;
+  enqueued_at: string; started_at: string | null; finished_at: string | null;
+}
+export interface JobsOverview {
+  queue: { available: boolean; waiting: number; in_progress: number; delayed: number; dead: number };
+  by_status: Record<string, number>; recent: BackgroundJob[];
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

@@ -80,7 +80,7 @@ def test_long_running_incident_is_not_polluted_by_later_incidents(client, demo):
     assert "postgres-primary" in implicated
 
 
-def test_run_investigation_requires_permission_and_is_audited(client, db, demo):
+def test_run_investigation_requires_permission_and_is_audited(client, db, demo, worker):
     users, incidents = demo
     number = incidents["HTTP 500 on password reset"]
     url = f"/api/v1/incidents/{number}/investigations"
@@ -91,8 +91,16 @@ def test_run_investigation_requires_permission_and_is_audited(client, db, demo):
     )
 
     response = client.post(url, headers=as_user(users["maria"]))
-    assert response.status_code == 201
-    inv = response.json()
+    assert response.status_code == 202  # accepted: the API never waits for the pipeline
+    queued = response.json()
+    assert queued["status"] == "QUEUED" and queued["hypothesis_key"] is None
+    assert [s["status"] for s in queued["progress"]] == ["pending"] * 6
+    assert client.post(url, headers=as_user(users["maria"])).status_code == 409  # one active run per incident
+
+    assert worker.drain() == 1
+    inv = client.get(f"{url}/{queued['id']}", headers=as_user(users["viewer"])).json()
+    assert inv["status"] == "COMPLETED" and inv["attempts"] == 1
+    assert {s["status"] for s in inv["progress"]} == {"done"}
     assert inv["hypothesis_key"] == "smtp_authentication_failure"
     assert inv["requested_by"]["email"] == "maria@opspilot.dev"
     change = by_kind(inv, "CHANGE_EVENT")[0]
@@ -105,7 +113,7 @@ def test_run_investigation_requires_permission_and_is_audited(client, db, demo):
     )
 
 
-def test_unknown_failure_mode_gets_low_confidence(client, db, demo):
+def test_unknown_failure_mode_gets_low_confidence(client, db, demo, worker):
     users, _ = demo
     incident = IncidentService(db).declare(
         title="Intermittent login slowness",
@@ -114,7 +122,10 @@ def test_unknown_failure_mode_gets_low_confidence(client, db, demo):
         started_at=datetime.now(UTC) - timedelta(hours=5),  # a quiet period: no injected failures yet
         actor=users["maria"],
     )
-    inv = client.post(f"/api/v1/incidents/{incident.number}/investigations", headers=as_user(users["maria"])).json()
+    url = f"/api/v1/incidents/{incident.number}/investigations"
+    queued = client.post(url, headers=as_user(users["maria"])).json()
+    worker.drain()
+    inv = client.get(f"{url}/{queued['id']}", headers=as_user(users["maria"])).json()
     assert inv["hypothesis_key"] == "unknown"
     assert inv["confidence"] <= 0.35
     assert "No anomalous log patterns" in inv["root_cause"]

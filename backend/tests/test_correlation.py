@@ -103,3 +103,16 @@ def test_link_ticket_to_incident(client, demo):
     linked = client.post(url, json=body, headers=as_user(users["maria"]))
     assert linked.status_code == 200 and ticket.number in [t["number"] for t in linked.json()["tickets"]]
     assert client.post(url, json=body, headers=as_user(users["maria"])).status_code == 409
+
+
+def test_new_ticket_is_matched_to_the_incident_in_its_own_area(client, demo, worker):
+    users, _, incidents = demo  # payment and SMTP incidents are both active right now
+    ticket = client.post(
+        "/api/v1/tickets",
+        json={"title": "Customers cannot complete checkout", "description": "The payment page freezes."},
+        headers=as_user(users["sam"]),
+    ).json()
+    worker.drain()
+    suggestion = client.get(f"/api/v1/tickets/{ticket['number']}/classification", headers=as_user(users["sam"])).json()
+    assert suggestion["service"]["name"] == "payment-service"
+    assert suggestion["signals"]["suspected_incident"] == incidents["Payment checkout timeout"].number

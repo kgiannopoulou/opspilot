@@ -1,11 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+import redis
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.ai.correlation import LogCorrelator
 from app.auth.dependencies import require
 from app.auth.permissions import Permission
+from app.auth.rate_limit import get_redis
 from app.core.database import get_db
 from app.models import Ticket, User
 from app.models.enums import Priority, TicketStatus
@@ -26,6 +28,7 @@ from app.schemas.ticket import (
 from app.services.classification import ClassificationService
 from app.services.ticket_workflow import allowed_transitions
 from app.services.tickets import TicketService
+from app.workers.jobs import JobService
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -59,9 +62,16 @@ def list_tickets(
 
 
 @router.post("", response_model=TicketOut, status_code=status.HTTP_201_CREATED)
-def create_ticket(data: TicketCreate, db: DB, user: Writer) -> TicketOut:
+def create_ticket(
+    data: TicketCreate,
+    db: DB,
+    user: Writer,
+    background: BackgroundTasks,
+    client: Annotated[redis.Redis, Depends(get_redis)],
+) -> TicketOut:
+    """Responds immediately; AI triage (correlation + classification) runs in a background worker."""
     ticket = TicketService(db).create(data, user)
-    ClassificationService(db).classify(ticket)  # a suggestion only; an analyst accepts or corrects it
+    JobService(db, client).submit("ticket.triage", "ticket", ticket.number, {"ticket_id": ticket.id}, background)
     return to_out(ticket)
 
 

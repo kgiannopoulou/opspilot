@@ -43,6 +43,23 @@ services:
       redis:
         condition: service_healthy
 
+  # Background jobs (AI triage, investigations) from the Redis stream. Scale with: docker compose up --scale worker=3
+  worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    env_file: .env.example
+    environment:
+      OPSPILOT_DATABASE_URL: postgresql+psycopg://opspilot:opspilot@postgres:5432/opspilot
+      OPSPILOT_REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "app.workers.main"]
+    healthcheck:
+      disable: true
+    depends_on:
+      api:
+        condition: service_healthy  # the API container applies migrations and seeds on start
+    stop_grace_period: 30s  # lets the current job finish (SIGTERM is handled)
+
   web:
     build:
       context: frontend

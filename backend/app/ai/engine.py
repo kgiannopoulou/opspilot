@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -92,6 +93,9 @@ class InvestigationResult:
     window_end: datetime
     search_query: str | None = None
     queries: list[QueryTemplate] = field(default_factory=list)  # filled templates, validated before storage
+    # What the knowledge-base retrieval is scoped by (set by the winning hypothesis).
+    emitter: str | None = None
+    doc_tags: tuple[str, ...] = ()
 
 
 class _Defaults(dict[str, Any]):
@@ -381,7 +385,6 @@ class InvestigationEngine:
             *self._metric_evidence(ctx, pattern.service, implicated),
             *self._change_evidence(ctx, related),
             *self._similar_incidents(ctx, hyp.signature),
-            *self._documents(query, pattern.service, hyp.doc_tags),
         ]
         values = {**pattern.sample, "service": pattern.service, "count": pattern.count,
                   "minutes": math.ceil(ctx.minutes)}  # fmt: skip
@@ -399,6 +402,8 @@ class InvestigationEngine:
             window_end=ctx.end,
             search_query=query,
             queries=queries,
+            emitter=pattern.service,
+            doc_tags=hyp.doc_tags,
         )
 
     def _unknown(self, ctx: _Context) -> InvestigationResult:
@@ -423,7 +428,6 @@ class InvestigationEngine:
             *self._metric_evidence(ctx, top.service, set()),
             *self._change_evidence(ctx, {top.service}),
             *self._similar_incidents(ctx, top.message),
-            *self._documents(query, top.service),
         ]
         team = ctx.services[top.service].owner_team if top.service in ctx.services else "owning"
         values = {"message": top.message, "service": top.service, "team": team}
@@ -440,12 +444,20 @@ class InvestigationEngine:
             window_start=ctx.start,
             window_end=ctx.end,
             search_query=query,
+            emitter=top.service,
         )
 
-    def investigate(self, incident: Incident) -> InvestigationResult:
+    def investigate(self, incident: Incident, step: Callable[[str], None] | None = None) -> InvestigationResult:
+        """`step(key)` is called as each stage starts, so a background worker can report progress."""
+        step = step or (lambda _key: None)
+        step("signals")  # logs + metrics for the window and the baseline
         ctx = self._context(incident)
+        step("hypotheses")  # changes, history, scoring
         candidates = [r for h in HYPOTHESES if (r := self._evaluate(ctx, h)) is not None]
         result = max(candidates, key=lambda r: r.confidence) if candidates else self._unknown(ctx)
+        step("documents")  # RAG, for the winning hypothesis only (documents never change the score)
+        if result.search_query and result.emitter:
+            result.evidence += self._documents(result.search_query, result.emitter, result.doc_tags)
         order = {EvidenceStance.SUPPORTS: 0, EvidenceStance.CONTRADICTS: 1, EvidenceStance.CONTEXT: 2}
         result.evidence.sort(key=lambda e: (e.kind == EvidenceKind.DOCUMENT, order[e.stance], -e.weight))
         seen: dict[str, int] = {}

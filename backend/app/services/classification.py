@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.ai.classifier import Classifier, get_classifier
+from app.ai.classifier import Classifier, KeywordClassifier, get_classifier
 from app.ai.correlation import LogCorrelator
 from app.core.errors import ConflictError, NotFoundError, ValidationFailed
 from app.models import Service, Ticket, TicketClassification, User
@@ -31,7 +31,12 @@ class ClassificationService:
     def classify(self, ticket: Ticket, actor: User | None = None) -> TicketClassification:
         """Predict and store a PENDING suggestion. The ticket itself is not changed."""
         classifier = self.classifier or get_classifier(self.db)
-        correlation = LogCorrelator(self.db).correlate(ticket)
+        # Scope the correlation by the ticket's service — or, if it has none, by a cheap first keyword pass — so a
+        # payments ticket is compared with payment-service and its neighbours, not with the whole platform.
+        service = ticket.service.name if ticket.service else None
+        if service is None:
+            service = KeywordClassifier(self.db).classify(ticket.title, ticket.description).service
+        correlation = LogCorrelator(self.db).correlate(ticket, service)
         prediction = classifier.classify(ticket.title, ticket.description, correlation)
         service = None
         if prediction.service:

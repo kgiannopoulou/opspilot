@@ -414,6 +414,45 @@ stored as **BLOCKED** with their violations and shown, not hidden — a useful s
 | `POST` | `/api/v1/incidents/{n}/investigations/{id}/queries/{qid}/run` | Run a proposal (body `{"sql": ...}` to run an edited version) |
 | `POST` | `/api/v1/sql/validate` | Dry-run the safety checks, used for live feedback while editing |
 
+## Background workers (Redis Streams)
+
+An LLM call — or even a 100 ms evidence pipeline — should not hold an HTTP request open. Ticket triage and
+investigations run in a worker:
+
+```
+POST /tickets ───────────► ticket saved ─► job row (PostgreSQL) ─► XADD opspilot:jobs ─► 201 in ~60 ms
+POST /incidents/…/investigations ─► QUEUED run + job ───────────────────────────────► 202 in ~60 ms
+
+worker (XREADGROUP)
+ ├─ ticket.triage         correlate logs/metrics around the ticket → classify → PENDING suggestion
+ └─ incident.investigate  search logs & metrics → score hypotheses → retrieve runbooks (pgvector)
+                          → write cited summary + grounding check → propose queries → save
+                          (each stage committed as it starts, so the UI shows live progress)
+```
+
+| Concern | How |
+|---|---|
+| Delivery | Redis Streams consumer group: each message to exactly one worker; `XACK` when done |
+| Crashed worker | Messages idle > 60 s are taken over with `XAUTOCLAIM` |
+| Failures | 3 attempts with exponential backoff (sorted-set delay queue), then the **dead-letter** stream |
+| Idempotency | Jobs and investigations that already finished are skipped on redelivery |
+| Source of truth | `background_jobs` in PostgreSQL (status, attempts, error, worker, timings); Redis only carries ids |
+| Redis down | The API still answers: the job runs in-process after the response (FastAPI `BackgroundTasks`) |
+| Concurrency | One active investigation per incident (409 otherwise); scale with `docker compose up --scale worker=3` |
+| Shutdown | SIGTERM finishes the current job, then exits |
+
+The incident page polls the queued run every second and shows each stage (`Search logs & metrics ✓ → Retrieve
+runbooks … → Save result`); new tickets show *"AI triage running in the background…"* until the suggestion lands.
+Admins see queue depth, retries, dead letters and per-job timings on `/admin` (`GET /api/v1/jobs`). Why a
+hand-written queue instead of Celery/RQ: the semantics above fit in [`queue.py`](backend/app/workers/queue.py)
+(~100 lines), there is nothing to configure, and RQ's forking worker does not run on Windows.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/v1/incidents/{number}/investigations` | Queue an investigation → **202** with the QUEUED run |
+| `GET` | `/api/v1/incidents/{number}/investigations/{id}` | Poll status and per-stage progress |
+| `GET` | `/api/v1/jobs` | Queue depth, outcomes by status, recent jobs (admin) |
+
 ## Repository structure
 
 ```
@@ -428,7 +467,7 @@ opspilot/
 │   │   ├── services/    business rules, one transaction per use case
 │   │   ├── repositories/ database access
 │   │   ├── ai/          evidence engine, chunking, embeddings, retrieval, LLM writer
-│   │   ├── workers/     background jobs
+│   │   ├── workers/     Redis Streams queue, job handlers, worker loop
 │   │   └── core/        config, database, security
 │   └── tests/
 ├── simulator/           ShopStream environment (log_generator/, metric_generator/, incidents/)
@@ -445,8 +484,12 @@ opspilot/
 ## Getting started
 
 ```bash
-docker compose up --build        # UI http://localhost:3010 · API http://localhost:8010/docs
+docker compose up --build        # UI http://localhost:3010 · API http://localhost:8010/docs (+ postgres, redis, worker)
 ```
+
+Optional AI providers (everything works without them): `OPSPILOT_LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`
+for Claude-written summaries, triage and query proposals; `OPSPILOT_EMBEDDING_PROVIDER=fastembed` for sentence
+embeddings. See [`.env.example`](.env.example).
 
 Ports are deliberately non-default (Postgres 5438, Redis 6381, API 8010, UI 3010) so OpsPilot can run next to
 other local stacks. Local development without Docker for the apps is described in [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -470,6 +513,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 13 | AI ticket classification with human review | ✅ |
 | 14 | Automatic log & metric correlation for tickets | ✅ |
 | 15 | AI-generated investigation queries with a SQL safety layer | ✅ |
+| 16 | Redis background workers: async triage and investigations with live progress | ✅ |
 
 ## License
 

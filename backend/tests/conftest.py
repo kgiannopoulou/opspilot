@@ -17,6 +17,7 @@ from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models import Role, Service, User
 from app.scripts.seed import reset
+from app.workers.worker import Worker
 
 TEST_DATABASE_URL = os.environ.get(
     "OPSPILOT_TEST_DATABASE_URL", "postgresql+psycopg://opspilot:opspilot@localhost:5438/opspilot_test"
@@ -71,6 +72,12 @@ def throttle() -> Iterator[LoginThrottle]:
     client.flushdb()
     yield LoginThrottle(client)
     client.flushdb()
+
+
+@pytest.fixture
+def worker(session_factory, throttle) -> Worker:
+    """The background worker, wired to the test database and Redis; call .drain() to process queued jobs."""
+    return Worker(session_factory, throttle.client, name="test-worker")
 
 
 @pytest.fixture

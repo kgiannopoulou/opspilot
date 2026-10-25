@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 
 from app.core.config import get_settings
 from app.models import Base
+from app.models.base import include_name
 
 config = context.config
 if config.config_file_name and config.attributes.get("configure_logger", True):
@@ -27,7 +28,13 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     engine = create_engine(database_url())
     with engine.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            include_schemas=True,
+            include_name=include_name,
+        )
         with context.begin_transaction():
             context.run_migrations()
     engine.dispose()

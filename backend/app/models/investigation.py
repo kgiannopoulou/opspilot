@@ -52,6 +52,10 @@ class AIInvestigation(Base):
     window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
+    # Pipeline stages as the worker reports them: [{key, label, status, started_at, finished_at}].
+    progress: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default="[]")
+    attempts: Mapped[int] = mapped_column(SmallInteger, server_default="0")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Result of checking the write-up against the evidence: citations resolve, numbers appear in what is cited.
     grounding: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
     duration_ms: Mapped[int | None] = mapped_column(BigInteger)

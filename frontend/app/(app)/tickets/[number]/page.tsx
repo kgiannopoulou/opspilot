@@ -86,7 +86,7 @@ export default function TicketPage({ params }: { params: Promise<{ number: strin
       </div>
       {error && <ErrorBox message={error} />}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card title="Description"><p className="whitespace-pre-wrap text-sm text-slate-200">{t.description}</p>
             {t.resolution && <p className="mt-3 rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-200"><b>Resolution:</b> {t.resolution}</p>}
@@ -122,7 +122,7 @@ export default function TicketPage({ params }: { params: Promise<{ number: strin
           </Card>
         </div>
         <div className="space-y-4">
-          <TriageSuggestion number={t.number} canWrite={canWrite} onChanged={refresh} />
+          <TriageSuggestion number={t.number} createdAt={t.created_at} canWrite={canWrite} onChanged={refresh} />
           <Card title="Details">
             <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-sm">
               <dt className="text-slate-500">Category</dt><dd>{t.category ? categoryLabel(t.category) : "—"}</dd>

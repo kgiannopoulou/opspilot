@@ -179,17 +179,29 @@ class LogCorrelator:
         return correlation
 
     def _suspected_incident(self, correlation: Correlation) -> dict[str, Any] | None:
-        """An open incident that started before the window closed and covers one of the misbehaving services."""
-        anomalous = {s.service for s in correlation.anomalous}
-        if not anomalous:
+        """The open incident (started before the window closed) that best explains the misbehaving services.
+
+        Ranked by relation first (an incident on the *reported* service beats one on a neighbour), then by how many
+        new problem events its services produced in the window — not by recency, which would pick whichever incident
+        happened to start last.
+        """
+        weight = {s.service: (s.relation == "reported", sum(p.count for p in s.patterns if p.new))
+                  for s in correlation.anomalous}  # fmt: skip
+        if not weight:
             return None
-        candidates = self.db.scalars(
-            select(Incident)
-            .where(Incident.status != IncidentStatus.RESOLVED, Incident.started_at <= correlation.window_end)
-            .order_by(Incident.started_at.desc())
-        ).unique()
-        for incident in candidates:
-            overlap = sorted(anomalous & {s.name for s in incident.affected_services})
-            if overlap:
-                return {"number": incident.number, "title": incident.title, "services": overlap}
-        return None
+        best: tuple[tuple[bool, int], Incident, list[str]] | None = None
+        for incident in self.db.scalars(
+            select(Incident).where(
+                Incident.status != IncidentStatus.RESOLVED, Incident.started_at <= correlation.window_end
+            )
+        ).unique():
+            overlap = sorted(weight.keys() & {s.name for s in incident.affected_services})
+            if not overlap:
+                continue
+            score = (any(weight[s][0] for s in overlap), sum(weight[s][1] for s in overlap))
+            if best is None or score > best[0]:
+                best = (score, incident, overlap)
+        if best is None:
+            return None
+        _, incident, overlap = best
+        return {"number": incident.number, "title": incident.title, "services": overlap}

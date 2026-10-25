@@ -56,6 +56,14 @@ class ClassificationStatus(StrEnum):
     SUPERSEDED = "SUPERSEDED"  # replaced by a newer suggestion before anyone reviewed it
 
 
+class JobStatus(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    RETRYING = "RETRYING"  # failed, re-enqueued with backoff
+    DEAD = "DEAD"  # out of attempts; moved to the dead-letter stream
+
+
 class QueryRisk(StrEnum):
     READ_ONLY = "READ_ONLY"  # passed every check; may be run by an engineer
     BLOCKED = "BLOCKED"  # violates a rule; shown for transparency, never executed
@@ -96,6 +104,7 @@ class DocumentCategory(StrEnum):
 
 
 class InvestigationStatus(StrEnum):
+    QUEUED = "QUEUED"  # accepted by the API, waiting for a worker
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"

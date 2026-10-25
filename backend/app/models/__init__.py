@@ -5,6 +5,7 @@ from app.models.base import Base
 from app.models.classification import TicketClassification
 from app.models.incident import Incident, IncidentTicket, incident_services
 from app.models.investigation import AIEvidence, AIInvestigation
+from app.models.job import BackgroundJob
 from app.models.knowledge import DocumentChunk, KnowledgeDocument
 from app.models.observability import ApplicationLog, MetricSample
 from app.models.queries import InvestigationQuery, QueryRun, shop_orders, shop_password_resets, shop_payments
@@ -18,6 +19,7 @@ __all__ = [
     "ApplicationLog",
     "AuditEvent",
     "Base",
+    "BackgroundJob",
     "DocumentChunk",
     "Incident",
     "InvestigationQuery",

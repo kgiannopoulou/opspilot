@@ -13,6 +13,15 @@ NAMING_CONVENTION = {
 }
 
 
+# Schemas Alembic manages: public (OpsPilot) and shopstream (the read-only application sandbox, models/queries.py).
+SCHEMAS = {None, "public", "shopstream"}
+
+
+def include_name(name: str | None, type_: str, _parent: object) -> bool:
+    """Alembic filter: compare only our schemas, never PostgreSQL's own."""
+    return type_ != "schema" or name in SCHEMAS
+
+
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 

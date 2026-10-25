@@ -46,16 +46,21 @@ def services(db, seeded):
     db.commit()
 
 
-def create(client, user, **overrides):
-    body = {"title": "Customers cannot complete checkout", "description": "Several customers: payment page freezes.",
-            "priority": "P3"} | overrides  # fmt: skip
-    response = client.post(URL, json=body, headers=as_user(user))
-    assert response.status_code == 201
-    return response.json()
+@pytest.fixture
+def create(client, worker):
+    def create(user, **overrides):
+        body = {"title": "Customers cannot complete checkout", "priority": "P3",
+                "description": "Several customers: payment page freezes."} | overrides  # fmt: skip
+        response = client.post(URL, json=body, headers=as_user(user))
+        assert response.status_code == 201
+        worker.drain()  # the triage job: correlation + classification
+        return response.json()
+
+    return create
 
 
-def test_new_ticket_gets_a_pending_suggestion_that_changes_nothing(client, seeded, services):
-    ticket = create(client, seeded["agent"])
+def test_new_ticket_gets_a_pending_suggestion_that_changes_nothing(client, seeded, services, create):
+    ticket = create(seeded["agent"])
     assert ticket["priority"] == "P3" and ticket["category"] is None and ticket["service"] is None
 
     suggestion = client.get(f"{URL}/{ticket['number']}/classification", headers=as_user(seeded["viewer"])).json()
@@ -66,8 +71,8 @@ def test_new_ticket_gets_a_pending_suggestion_that_changes_nothing(client, seede
     assert "checkout" in suggestion["rationale"]
 
 
-def test_accepting_applies_the_suggestion_and_is_recorded(client, db, seeded, services):
-    ticket = create(client, seeded["agent"])
+def test_accepting_applies_the_suggestion_and_is_recorded(client, db, seeded, services, create):
+    ticket = create(seeded["agent"])
     suggestion = client.get(f"{URL}/{ticket['number']}/classification", headers=as_user(seeded["agent"])).json()
     review = f"{URL}/{ticket['number']}/classification/{suggestion['id']}/review"
 
@@ -91,8 +96,8 @@ def test_accepting_applies_the_suggestion_and_is_recorded(client, db, seeded, se
     assert client.post(review, json={"action": "reject"}, headers=as_user(seeded["agent"])).status_code == 409
 
 
-def test_modify_records_what_the_analyst_corrected(client, seeded, services):
-    ticket = create(client, seeded["agent"], title="Typo in password reset e-mail", description="'Pasword' in subject")
+def test_modify_records_what_the_analyst_corrected(client, seeded, services, create):
+    ticket = create(seeded["agent"], title="Typo in password reset e-mail", description="'Pasword' in subject")
     suggestion = client.get(f"{URL}/{ticket['number']}/classification", headers=as_user(seeded["agent"])).json()
     review = f"{URL}/{ticket['number']}/classification/{suggestion['id']}/review"
     headers = as_user(seeded["maria"])
@@ -112,8 +117,8 @@ def test_modify_records_what_the_analyst_corrected(client, seeded, services):
     assert metrics["acceptance_rate"] == 0.0
 
 
-def test_reject_leaves_the_ticket_alone_and_reclassify_supersedes(client, db, seeded, services):
-    ticket = create(client, seeded["agent"])
+def test_reject_leaves_the_ticket_alone_and_reclassify_supersedes(client, db, seeded, services, create):
+    ticket = create(seeded["agent"])
     first = client.get(f"{URL}/{ticket['number']}/classification", headers=as_user(seeded["agent"])).json()
     second = client.post(f"{URL}/{ticket['number']}/classification", headers=as_user(seeded["agent"])).json()
     assert second["id"] != first["id"] and second["status"] == "PENDING"

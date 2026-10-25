@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** early development — the project is being built in public, step by step.
+> **Status:** active development — built in public, step by step (16 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -280,10 +280,14 @@ Logs · metrics · changes · history ─► evidence engine (scored hypothesis)
 |---|---|---|
 | `GET` | `/api/v1/knowledge/search?q=&k=&service=` | Semantic search over passages (the retrieval investigations use) |
 
+![Semantic search over the knowledge base](docs/screenshots/knowledge-semantic-search.jpg)
+
 `python -m app.scripts.reindex` syncs `knowledge-base/` (the API container runs it on start); only changed documents
 are re-chunked and re-embedded.
 
 ## Evidence citations & grounding
+
+![Cited write-up, grounding check and sources](docs/screenshots/evidence-citations.jpg)
 
 *"The payment gateway probably timed out"* is not useful during an outage. OpsPilot's write-ups cite every claim:
 
@@ -348,6 +352,8 @@ then chooses on the ticket page:
 
 ## Automatic log correlation
 
+![Ticket page: correlated signals, suspected incident and the AI triage suggestion](docs/screenshots/ticket-triage-correlation.jpg)
+
 A ticket says *"Payment screen times out after login"*. Before anyone opens a log viewer, OpsPilot looks at what the
 platform was doing **±15 minutes around the ticket's creation**, for the reported service, the services it depends
 on and the services that depend on it ([`correlation.py`](backend/app/ai/correlation.py)):
@@ -409,6 +415,8 @@ The tests include a "validator bypassed" fixture that disables the first layers 
 refuse `DELETE`, `UPDATE` and reading password hashes, and cancel `pg_sleep`. LLM proposals that fail validation are
 stored as **BLOCKED** with their violations and shown, not hidden — a useful signal when evaluating a model.
 
+![Investigation queries: Why, Risk, Run query, results, and an edited query blocked by the validator](docs/screenshots/investigation-queries.jpg)
+
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `POST` | `/api/v1/incidents/{n}/investigations/{id}/queries/{qid}/run` | Run a proposal (body `{"sql": ...}` to run an edited version) |
@@ -446,6 +454,10 @@ runbooks … → Save result`); new tickets show *"AI triage running in the back
 Admins see queue depth, retries, dead letters and per-job timings on `/admin` (`GET /api/v1/jobs`). Why a
 hand-written queue instead of Celery/RQ: the semantics above fit in [`queue.py`](backend/app/workers/queue.py)
 (~100 lines), there is nothing to configure, and RQ's forking worker does not run on Windows.
+
+| Queued investigation (worker paused for the screenshot) | Admin: queue depth and recent jobs |
+|---|---|
+| ![Investigation queued](docs/screenshots/investigation-queued.jpg) | ![Background jobs](docs/screenshots/admin-background-jobs.jpg) |
 
 | Method | Endpoint | Purpose |
 |---|---|---|

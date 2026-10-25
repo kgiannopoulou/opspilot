@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use, useState } from "react";
+import { CorrelatedSignals } from "@/components/CorrelatedSignals";
 import { TriageSuggestion, categoryLabel } from "@/components/TriageSuggestion";
 import { Card, ErrorBox, PriorityBadge, Spinner, StatusBadge, relativeTime, utcDateTime } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
@@ -90,6 +91,7 @@ export default function TicketPage({ params }: { params: Promise<{ number: strin
           <Card title="Description"><p className="whitespace-pre-wrap text-sm text-slate-200">{t.description}</p>
             {t.resolution && <p className="mt-3 rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-200"><b>Resolution:</b> {t.resolution}</p>}
           </Card>
+          <CorrelatedSignals number={t.number} linkedIncident={linkedIncident} canLink={can("incidents:investigate")} onLinked={refresh} />
           <Card title={`Comments (${comments.data?.length ?? 0})`}>
             <ul className="space-y-3">
               {comments.data?.map((c) => (

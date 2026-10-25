@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.ai.correlation import LogCorrelator
 from app.auth.dependencies import require
 from app.auth.permissions import Permission
 from app.core.database import get_db
@@ -11,6 +12,7 @@ from app.models.enums import Priority, TicketStatus
 from app.repositories.tickets import TicketFilters, TicketRepository
 from app.schemas.classification import ClassificationMetrics, ClassificationOut, ClassificationReview
 from app.schemas.common import Page
+from app.schemas.correlation import CorrelationOut
 from app.schemas.ticket import (
     CommentCreate,
     CommentOut,
@@ -123,6 +125,18 @@ def review_classification(
         category=data.category, priority=data.priority, service=data.service, note=data.note,
     )  # fmt: skip
     return ClassificationOut.model_validate(row)
+
+
+@router.get("/{number}/correlation", response_model=CorrelationOut)
+def correlate_ticket(number: str, db: DB, _: Reader) -> CorrelationOut:
+    """Logs and metrics of the ticket's service, its dependencies and dependents, ±15 minutes around creation.
+
+    Without a service on the ticket, the pending AI suggestion's service is used, else the whole platform.
+    """
+    ticket = TicketService(db).get(number)
+    suggestion = ClassificationService(db).latest(ticket)
+    service = None if ticket.service else (suggestion.service.name if suggestion and suggestion.service else None)
+    return CorrelationOut(**LogCorrelator(db).correlate(ticket, service).as_dict())
 
 
 @router.get("/{number}/events", response_model=list[TicketEventOut])

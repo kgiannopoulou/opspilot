@@ -20,12 +20,12 @@ import random
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
-from app.models import Base, Incident, IncidentTicket, Role, Service, Ticket, User
+from app.models import Base, Incident, IncidentTicket, Role, Service, Ticket, TicketEvent, User
 from app.models.enums import IncidentStatus, Priority, Severity, TicketCategory, TicketSource, TicketStatus
 from app.repositories.observability import bulk_insert_logs, bulk_insert_metrics
 from app.repositories.tickets import TicketRepository
@@ -312,7 +312,7 @@ def seed_live(db: Session, now: datetime, users: dict[str, User], services: dict
     for live, sched in zip(LIVE_INCIDENTS, scheduled, strict=True):
         scenario = SCENARIOS[live.scenario]
         numbers = []
-        for report in scenario.reports:
+        for i, report in enumerate(scenario.reports):
             ticket = tickets.create(
                 TicketCreate(
                     title=report.title,
@@ -327,6 +327,8 @@ def seed_live(db: Session, now: datetime, users: dict[str, User], services: dict
             tickets.transition(ticket.number, TicketTransition(status=TicketStatus.TRIAGED), maria)
             tickets.transition(ticket.number, TicketTransition(status=TicketStatus.INVESTIGATING), maria)
             tickets.comment(ticket.number, CommentCreate(body="Linked to the active incident.", internal=True), maria)
+            # Customers report a few minutes after onset; the ticket's timeline follows from there.
+            _backdate(db, ticket, sched.start + timedelta(minutes=4 + 3 * i))
             numbers.append(ticket.number)
 
         affected = sorted({scenario.symptom_service, scenario.root_cause_service})
@@ -347,6 +349,16 @@ def seed_live(db: Session, now: datetime, users: dict[str, User], services: dict
             db.commit()
         if live.investigated:
             InvestigationService(db).run(incident, maria, now=now)
+
+
+def _backdate(db: Session, ticket: Ticket, created: datetime) -> None:
+    ticket.created_at = created
+    ticket.triaged_at = created + timedelta(minutes=2) if ticket.triaged_at else None
+    events = db.scalars(select(TicketEvent).where(TicketEvent.ticket_id == ticket.id).order_by(TicketEvent.id))
+    for n, event in enumerate(list(events)):
+        event.created_at = created + timedelta(minutes=n)
+    db.execute(update(Ticket).where(Ticket.id == ticket.id).values(updated_at=created + timedelta(minutes=5)))
+    db.commit()
 
 
 def seed(db: Session, now: datetime | None = None) -> None:

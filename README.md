@@ -346,6 +346,34 @@ then chooses on the ticket page:
 | `POST` | `/api/v1/tickets/{number}/classification/{id}/review` | `{"action": "accept" \| "modify" \| "reject", ...}` |
 | `GET` | `/api/v1/tickets/classifications/metrics` | Acceptance rate and corrections per field |
 
+## Automatic log correlation
+
+A ticket says *"Payment screen times out after login"*. Before anyone opens a log viewer, OpsPilot looks at what the
+platform was doing **±15 minutes around the ticket's creation**, for the reported service, the services it depends
+on and the services that depend on it ([`correlation.py`](backend/app/ai/correlation.py)):
+
+```
+payment-service    reported    ! anomalous   19 × GatewayTimeoutException (new)   p95 latency 1,049 ms → 5,321 ms
+postgres-primary   dependency  ✓ normal      query p95 14 ms (baseline 13 ms)
+order-service      dependent   ! anomalous   19 × Payment failed (new)
+→ Matches active incident INC-135 — Payment checkout timeout            [Link ticket]
+```
+
+- WARN/ERROR patterns are compared with the 2 hours before the window (a pattern is *new* at 5× its usual rate), and
+  latency, error rate, connections and CPU with their baseline, using the same rules as the investigation engine.
+  Every pattern keeps its `LOG-<id>` citation key.
+- A ticket with no service is scoped by its AI suggestion's service, or the whole platform.
+- **The AI receives the same signals:** the triage classifier gets the correlation, so a vague ticket
+  (*"something is weird"*) is routed to the service with the most new errors, and the rationale names the active
+  incident it matches. With an LLM, the signals are part of the prompt.
+- An open incident covering an anomalous service is suggested; engineers link the ticket with one click
+  (`POST /api/v1/incidents/{number}/tickets`).
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/tickets/{number}/correlation` | Per-service log patterns and metric deltas around the ticket, suspected incident |
+| `POST` | `/api/v1/incidents/{number}/tickets` | Link a ticket to an incident (`incidents:investigate`) |
+
 ## Repository structure
 
 ```
@@ -400,6 +428,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 11 | RAG: knowledge base, chunking, embeddings, pgvector retrieval, LLM write-up | ✅ |
 | 12 | Evidence citations and grounding check | ✅ |
 | 13 | AI ticket classification with human review | ✅ |
+| 14 | Automatic log & metric correlation for tickets | ✅ |
 
 ## License
 

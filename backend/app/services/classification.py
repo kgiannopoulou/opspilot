@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.classifier import Classifier, get_classifier
+from app.ai.correlation import LogCorrelator
 from app.core.errors import ConflictError, NotFoundError, ValidationFailed
 from app.models import Service, Ticket, TicketClassification, User
 from app.models.enums import ClassificationStatus, Priority, TicketCategory, TicketEventType
@@ -30,7 +31,8 @@ class ClassificationService:
     def classify(self, ticket: Ticket, actor: User | None = None) -> TicketClassification:
         """Predict and store a PENDING suggestion. The ticket itself is not changed."""
         classifier = self.classifier or get_classifier(self.db)
-        prediction = classifier.classify(ticket.title, ticket.description)
+        correlation = LogCorrelator(self.db).correlate(ticket)
+        prediction = classifier.classify(ticket.title, ticket.description, correlation)
         service = None
         if prediction.service:
             service = self.db.scalar(select(Service).where(Service.name == prediction.service))

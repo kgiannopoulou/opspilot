@@ -13,6 +13,7 @@ from app.models.enums import IncidentStatus, Severity
 from app.repositories.dashboard import DashboardRepository
 from app.repositories.evidence import EvidenceRepository
 from app.schemas.common import Page
+from app.schemas.correlation import LinkTicket
 from app.schemas.incident import (
     IncidentDetail,
     IncidentStatusChange,
@@ -93,6 +94,16 @@ def get_incident(number: str, db: DB, _: Reader) -> IncidentDetail:
 @router.post("/{number}/status", response_model=IncidentDetail)
 def change_incident_status(number: str, data: IncidentStatusChange, db: DB, user: Investigator) -> IncidentDetail:
     incident = IncidentService(db).change_status(number, data.status, user, data.root_cause)
+    return to_detail(db, incident)
+
+
+@router.post("/{number}/tickets", response_model=IncidentDetail)
+def link_ticket(number: str, data: LinkTicket, db: DB, user: Investigator) -> IncidentDetail:
+    """Attach a customer ticket to this incident (e.g. the incident suggested by the ticket's correlation)."""
+    service = IncidentService(db)
+    incident = service.get(number)
+    service.link_ticket(incident, data.ticket_number, user)
+    db.refresh(incident)
     return to_detail(db, incident)
 
 

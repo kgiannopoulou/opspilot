@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,9 @@ from app.ai.llm import LLMClient, LLMError
 from app.ai.retrieval import KnowledgeRetriever
 from app.models import KnowledgeDocument, Service
 from app.models.enums import Priority, TicketCategory
+
+if TYPE_CHECKING:
+    from app.ai.correlation import Correlation
 
 log = logging.getLogger(__name__)
 C = TicketCategory
@@ -77,7 +80,9 @@ class Prediction:
 class Classifier(Protocol):
     name: str
 
-    def classify(self, title: str, description: str) -> Prediction: ...
+    def classify(self, title: str, description: str, correlation: Correlation | None = None) -> Prediction:
+        """`correlation`: what the platform was doing when the ticket arrived (see correlation.py), if known."""
+        ...
 
 
 def _stems(words: tuple[str, ...]) -> set[str]:
@@ -123,7 +128,7 @@ class KeywordClassifier:
                 return doc.service.name, f"{passage.title} §{passage.section}"
         return None, None
 
-    def classify(self, title: str, description: str) -> Prediction:
+    def classify(self, title: str, description: str, correlation: Correlation | None = None) -> Prediction:
         text = f"{title}. {description}"
         tokens = tokenize(text)
         hits = {cat: sorted({t for t in tokens if t in stems}) for cat, stems in self.lexicon.items()}
@@ -139,13 +144,21 @@ class KeywordClassifier:
         lowered = text.lower()
         mentioned = next((s for s in self.services if s in lowered), None)
         hinted = next((svc for word, svc in SERVICE_HINTS.items() if word in lowered), None)
-        kb_service, kb_source = self._kb_service(text) if not (mentioned or hinted) else (None, None)
-        service = mentioned or CATEGORY_SERVICE.get(category) or hinted or CATEGORY_SERVICE.get(area) or kb_service
+        # When the text does not say where the problem is, the service with the most new errors right now is a good
+        # bet (correlation.py); the rationale says so, and the analyst confirms it.
+        anomalous = [s.service for s in correlation.anomalous] if correlation else []
+        new_errors = {s.service: sum(p.count for p in s.patterns if p.new and p.level == "ERROR")
+                      for s in (correlation.anomalous if correlation else [])}  # fmt: skip
+        observed = max(new_errors, key=lambda svc: (new_errors[svc], svc)) if any(new_errors.values()) else None
+        kb_service, kb_source = self._kb_service(text) if not (mentioned or hinted or observed) else (None, None)
+        service = (mentioned or CATEGORY_SERVICE.get(category) or hinted or CATEGORY_SERVICE.get(area) or observed
+                   or kb_service)  # fmt: skip
         service_source = (
             "named in the ticket" if mentioned else
             "category default" if CATEGORY_SERVICE.get(category) == service else
             "product area" if hinted == service else
             "secondary category" if area and CATEGORY_SERVICE.get(area) == service else
+            "most new errors around the ticket's creation" if observed == service and service else
             f"knowledge base ({kb_source})" if kb_service == service and service else "none"
         )  # fmt: skip
 
@@ -163,6 +176,9 @@ class KeywordClassifier:
             + (f" ({'; '.join(priority_reasons)})" if priority_reasons else " (no impact phrases)")
             + f". Service: {service or 'unknown'} ({service_source})."
         )
+        incident = correlation.suspected_incident if correlation else None
+        if incident:
+            rationale += f" Matches active incident {incident['number']} ({', '.join(incident['services'])})."
         return Prediction(
             category=category,
             priority=priority,
@@ -175,6 +191,8 @@ class KeywordClassifier:
                 "scores": {c.value: s for c, s in scores.items() if s},
                 "priority": priority_reasons,
                 "service_source": service_source,
+                "anomalous_services": anomalous,
+                "suspected_incident": incident["number"] if incident else None,
             },
         )
 
@@ -189,9 +207,10 @@ PERFORMANCE (slowness without a clearer product area), OTHER.
 Priorities: P1 = a core flow (checkout, login) failing for many customers; P2 = a core flow degraded or a secondary \
 flow failing for many; P3 = minor degradation or a single customer; P4 = cosmetic or a question.
 
-Base the answer only on the ticket text. confidence is your probability (0-1) that category, priority and service \
-are all correct; use lower values when the text is vague. rationale: one or two sentences quoting the words that \
-decided it."""
+Base the answer on the ticket text; PLATFORM SIGNALS, when present, show which services misbehaved when the \
+ticket was created and may decide the service when the text is vague. confidence is your probability (0-1) \
+that category, priority and service are all correct; use lower values when the text is vague. rationale: one or \
+two sentences quoting the words (or signals) that decided it."""
 
 
 class LLMClassifier:
@@ -215,9 +234,16 @@ class LLMClassifier:
             "additionalProperties": False,
         }
 
-    def classify(self, title: str, description: str) -> Prediction:
+    def classify(self, title: str, description: str, correlation: Correlation | None = None) -> Prediction:
         catalogue = "\n".join(f"- {name}: {desc}" for name, desc in self.services.items())
         prompt = f"SERVICES:\n{catalogue}\n\nTICKET TITLE: {title}\nTICKET DESCRIPTION:\n{description}"
+        if correlation is not None:
+            # The model sees the same correlated signals the analyst sees on the ticket page.
+            prompt += (
+                f"\n\nPLATFORM SIGNALS {correlation.window_start:%H:%M}-{correlation.window_end:%H:%M} UTC "
+                f"(around the ticket's creation):\n"
+                + "\n".join(f"- {s.service} ({s.relation}): {s.summary}" for s in correlation.services)
+            )
         try:
             data = self.llm.complete_json(SYSTEM_PROMPT, prompt, self.schema(), max_tokens=2048)
             prediction = Prediction(
@@ -230,7 +256,7 @@ class LLMClassifier:
             )
         except (LLMError, KeyError, ValueError, TypeError) as exc:
             log.warning("LLM classifier failed, using %s: %s", self.fallback.name, exc)
-            prediction = self.fallback.classify(title, description)
+            prediction = self.fallback.classify(title, description, correlation)
             prediction.signals["llm_error"] = str(exc)
             return prediction
         if prediction.service is not None and prediction.service not in self.services:

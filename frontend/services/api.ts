@@ -54,6 +54,22 @@ export interface Classification {
   final_category: TicketCategory | null; final_priority: Priority | null; final_service: ServiceRef | null;
   review_note: string | null; reviewed_by: UserRef | null; reviewed_at: string | null; created_at: string;
 }
+export interface PatternSignal {
+  ref: string; level: string; message: string; count: number; baseline_count: number; new: boolean; first_seen: string;
+  sample: Record<string, unknown>;
+}
+export interface MetricSignal {
+  ref: string; metric: string; label: string; baseline: number; current: number; change_pct: number; anomalous: boolean;
+  display: string;
+}
+export interface ServiceSignals {
+  service: string; relation: "reported" | "dependency" | "dependent" | "platform"; status: "anomalous" | "normal" | "no data";
+  summary: string; patterns: PatternSignal[]; metrics: MetricSignal[];
+}
+export interface Correlation {
+  ticket: string; anchor: string; window_start: string; window_end: string; headline: string; services: ServiceSignals[];
+  suspected_incident: { number: string; title: string; services: string[] } | null;
+}
 export interface TicketComment { id: number; body: string; internal: boolean; author: UserRef; created_at: string }
 export interface TicketEvent {
   id: number; type: string; from_value: string | null; to_value: string | null;

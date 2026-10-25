@@ -1,5 +1,6 @@
 """Retrieval-augmented generation: chunking, embeddings, pgvector search and the LLM write-up stage."""
 
+import re
 from datetime import UTC, datetime
 
 import pytest
@@ -111,16 +112,20 @@ class FakeLLM:
         self.calls.append((system, prompt, schema))
         if self.error:
             raise self.error
-        return self.answer
+        return self.answer(prompt) if callable(self.answer) else self.answer
+
+
+def first_ref(prompt: str, prefix: str) -> str:
+    return re.search(rf'"ref": "({prefix}-[^"]+)"', prompt).group(1)
 
 
 def test_llm_writer_receives_only_collected_evidence(db, demo):
     _, incidents = demo
     incident = incidents["HTTP 500 on password reset"]
     llm = FakeLLM(
-        {
+        lambda prompt: {
             "root_cause": "SMTP authentication fails after the credential change.",
-            "narrative": "notification-service cannot log in to the relay.",
+            "narrative": f"notification-service cannot log in to the relay [{first_ref(prompt, 'LOG')}].",
             "recommended_steps": ["Roll back the smtp/relay secret", " "],
         }
     )
@@ -143,7 +148,7 @@ def test_llm_failure_falls_back_to_extractive_write_up(db, demo):
     )
     assert run.status.value == "COMPLETED"
     assert run.engine == "rules-v1+rag/extractive-v1"
-    assert "Supporting evidence:" in run.narrative
+    assert run.grounding["passed"] and run.grounding["llm_error"] == "model provider unreachable"
 
 
 def _result_of(db, incident):

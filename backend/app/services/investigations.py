@@ -68,6 +68,7 @@ class InvestigationService:
         run.search_query = result.search_query
         run.confidence = result.confidence
         run.recommended_steps = draft.recommended_steps
+        run.grounding = draft.grounding
         run.suggested_sql = result.suggested_sql
         run.window_start, run.window_end = result.window_start, result.window_end
         run.evidence = [
@@ -80,6 +81,8 @@ class InvestigationService:
                 data=e.data,
                 related_incident_id=e.related_incident_id,
                 document_id=e.document_id,
+                ref=e.ref,
+                chunk_id=e.chunk_id,
             )
             for i, e in enumerate(result.evidence)
         ]

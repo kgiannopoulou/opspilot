@@ -51,12 +51,63 @@ function ConfidenceMeter({ value }: { value: number }) {
   );
 }
 
+const citationId = (ref: string) => `ev-${ref.replace(/[^A-Za-z0-9-]/g, "_")}`;
+
+function focusEvidence(ref: string) {
+  const el = document.getElementById(citationId(ref));
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("ring-1", "ring-sky-500/70");
+  setTimeout(() => el.classList.remove("ring-1", "ring-sky-500/70"), 1600);
+}
+
+function Cite({ refs }: { refs: string[] }) {
+  return (
+    <span className="whitespace-nowrap">
+      {refs.map((r) => (
+        <button key={r} onClick={() => focusEvidence(r)} title="Show this evidence"
+          className="mx-0.5 rounded bg-sky-500/10 px-1 py-px align-baseline font-mono text-[10.5px] text-sky-300 ring-1 ring-sky-500/30 hover:bg-sky-500/20">
+          {r}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/** Narrative text with its [REF, REF] markers rendered as clickable citations. */
+function CitedText({ text }: { text: string }) {
+  const parts = text.split(/(\[[A-Z][A-Z]*-[^[\]]+?\])/g);
+  return <>{parts.map((p, i) => (/^\[[A-Z]/.test(p) ? <Cite key={i} refs={p.slice(1, -1).split(",").map((r) => r.trim())} /> : p))}</>;
+}
+
+function GroundingBadge({ g }: { g: Investigation["grounding"] }) {
+  if (g.passed === undefined) return null;
+  const rejected = g.rejected_llm_draft;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+      <span className={`rounded-full px-2 py-0.5 ring-1 ${g.passed ? "bg-[#0ca30c]/10 text-[#5fd35f] ring-[#0ca30c]/40" : "bg-[#d03b3b]/10 text-[#f08a8a] ring-[#d03b3b]/40"}`}>
+        {g.passed ? "✓" : "✕"} Grounding check · {g.cited?.length ?? 0} citations verified
+      </span>
+      {rejected && (
+        <span className="text-[#fcd27a]" title={JSON.stringify(rejected, null, 1)}>
+          ⚠ LLM draft rejected ({[
+            rejected.unknown_refs.length && `${rejected.unknown_refs.length} unknown refs`,
+            rejected.uncited_sentences.length && `${rejected.uncited_sentences.length} uncited sentences`,
+            rejected.unsupported_numbers.length && `${rejected.unsupported_numbers.length} unsupported numbers`,
+          ].filter(Boolean).join(", ")}) — extractive write-up shown
+        </span>
+      )}
+      {g.llm_error && <span className="text-slate-500">LLM unavailable ({g.llm_error}) — extractive write-up shown</span>}
+    </div>
+  );
+}
+
 function EvidenceRow({ e }: { e: Evidence }) {
   const [open, setOpen] = useState(false);
   const s = STANCE[e.stance];
   const sample = (e.data.sample ?? e.data.attributes) as Record<string, unknown> | undefined;
   return (
-    <li className="py-2">
+    <li id={citationId(e.ref)} className="rounded py-2 transition-shadow">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-3 text-left" aria-expanded={open}>
         <span title={s.label} className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${s.className}`}>{s.icon}</span>
         <span className="flex-1 text-sm text-slate-200">
@@ -67,6 +118,7 @@ function EvidenceRow({ e }: { e: Evidence }) {
             </Link>
           )}
         </span>
+        {e.ref && <span className="hidden shrink-0 font-mono text-[10px] text-slate-500 lg:inline">{e.ref}</span>}
         <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">{KIND_LABEL[e.kind]}</span>
         {e.weight > 0 && <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-500" title="Evidence weight">{e.weight.toFixed(2)}</span>}
       </button>
@@ -125,9 +177,8 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
   const findings = inv.evidence.filter((e) => e.kind !== "DOCUMENT");
   const docs = inv.evidence.filter((e) => e.kind === "DOCUMENT" && e.document);
   const supporting = findings.filter((e) => e.stance === "SUPPORTS").length;
-  // The extractive write-up repeats the root cause as its first sentence; show only what it adds.
-  const narrative = inv.narrative && inv.root_cause && inv.narrative.startsWith(inv.root_cause)
-    ? inv.narrative.slice(inv.root_cause.length).trim() : inv.narrative;
+  const byRef = new Map(inv.evidence.map((e) => [e.ref, e]));
+  const sources = (inv.grounding.cited ?? []).map((r) => byRef.get(r)).filter((e): e is Evidence => !!e);
 
   return (
     <Card title="AI investigation" action={runButton}>
@@ -135,7 +186,8 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
         <div>
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Probable root cause</div>
           <p className="mt-1.5 text-base leading-relaxed text-slate-100">{inv.root_cause}</p>
-          {narrative && <p className="mt-2 text-sm leading-relaxed text-slate-300">{narrative}</p>}
+          {inv.narrative && <p className="mt-2 text-sm leading-relaxed text-slate-300"><CitedText text={inv.narrative} /></p>}
+          <GroundingBadge g={inv.grounding} />
           {canInvestigate && inv.root_cause && inv.hypothesis_key !== "unknown" && (
             <button onClick={() => onAccept(inv.root_cause!)} className="mt-2 text-xs text-sky-400 hover:underline">
               Accept as root cause → mark identified
@@ -144,6 +196,21 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
         </div>
         <ConfidenceMeter value={inv.confidence ?? 0} />
       </div>
+
+      {sources.length > 0 && (
+        <div className="mt-5">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Sources</div>
+          <ul className="space-y-1">
+            {sources.map((e) => (
+              <li key={e.ref} className="flex items-baseline gap-2 text-xs">
+                <Cite refs={[e.ref]} />
+                <span className="text-slate-400">{KIND_LABEL[e.kind]}</span>
+                <span className="truncate text-slate-300">{e.summary}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-6">
         <div className="mb-1 flex items-baseline justify-between">
@@ -170,7 +237,7 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
           {docs.length === 0 ? <p className="text-sm text-slate-500">No matching documents.</p> : (
             <ul className="space-y-2.5">
               {docs.map((d) => (
-                <li key={d.id}>
+                <li key={d.id} id={citationId(d.ref)} className="rounded transition-shadow">
                   <Link href={`/knowledge/${d.document!.slug}`} className="group flex items-center gap-2 text-sm text-sky-300 hover:underline">
                     <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase text-slate-400 no-underline">{d.document!.category}</span>
                     {d.document!.title}
@@ -206,7 +273,7 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
       <div className="mt-5 border-t border-slate-800 pt-3 text-[11px] text-slate-500">
         Engine <span className="font-mono">{inv.engine}</span> · window {utcTime(inv.window_start)}–{utcTime(inv.window_end)} ·
         {" "}ran {relativeTime(inv.created_at)}{inv.requested_by ? ` by ${inv.requested_by.full_name}` : ""} · {inv.duration_ms} ms ·
-        conclusions are computed only from the evidence listed above
+        every sentence must cite evidence from this run, or the write-up is rejected
       </div>
     </Card>
   );

@@ -52,6 +52,10 @@ def _pct(v: float) -> str:
     return f"{v * 100:.1f}%"
 
 
+DOC_PREFIX = {"runbook": "RUNBOOK", "troubleshooting": "GUIDE", "architecture": "ARCH", "process": "PROCESS"}
+METRIC_SHORT = {"api_latency_p95_ms": "latency", "error_rate": "error-rate", "query_latency_p95_ms": "query-latency",
+                "database_connections": "connections", "cpu_usage": "cpu"}  # fmt: skip
+
 METRIC_RULES: dict[str, MetricRule] = {
     "api_latency_p95_ms": MetricRule("p95 latency", 0.30, lambda b, c: c >= 2 * b, _ms),
     "error_rate": MetricRule("error rate", 0.25, lambda b, c: c >= 0.03 and c >= 3 * b, _pct),
@@ -70,6 +74,10 @@ class Evidence:
     data: dict[str, Any] = field(default_factory=dict)
     related_incident_id: int | None = None
     document_id: int | None = None
+    # Citation key (LOG-48392, METRIC-payment-service-latency, INC-106, RUNBOOK-payment-gateway-timeout §1):
+    # unique within an investigation, and the only way a write-up may refer to a fact.
+    ref: str = ""
+    chunk_id: int | None = None
 
 
 @dataclass
@@ -171,7 +179,8 @@ class InvestigationEngine:
             Evidence(
                 EvidenceKind.LOG_PATTERN,
                 EvidenceStance.SUPPORTS,
-                f"{pattern.count} {pattern.message} events from {pattern.service} since onset "
+                f"{pattern.count} {pattern.message} events from {pattern.service} between "
+                f"{pattern.first_seen:%H:%M} and {pattern.last_seen:%H:%M} UTC "
                 + ("(none in the preceding 2 h)" if before == 0 else f"({before} in the preceding 2 h)"),
                 0.45 if before == 0 else (0.3 if new else 0.1),
                 {
@@ -181,8 +190,11 @@ class InvestigationEngine:
                     "count": pattern.count,
                     "baseline_count": before,
                     "first_seen": pattern.first_seen.isoformat(),
+                    "last_seen": pattern.last_seen.isoformat(),
+                    "first_log_id": pattern.first_id,
                     "sample": pattern.sample,
                 },
+                ref=f"LOG-{pattern.first_id}",
             )
         ]
         for p in corroborating:
@@ -197,8 +209,10 @@ class InvestigationEngine:
                         "level": p.level,
                         "message": p.message,
                         "count": p.count,
+                        "first_log_id": p.first_id,
                         "sample": p.sample,
                     },
+                    ref=f"LOG-{p.first_id}",
                 )  # fmt: skip
             )
         return out
@@ -220,11 +234,16 @@ class InvestigationEngine:
                     if metric != "cpu_usage":
                         healthy[svc].append(f"{rule.label} {rule.fmt(cur)} (baseline {rule.fmt(base)})")
                     continue
+                ref = f"METRIC-{svc}-{METRIC_SHORT[metric]}"
                 anomalous_services.add(svc)
                 change_text = f"increased {change:,.0f}%" if metric.endswith("_ms") else "rose"
                 summary = f"{svc} {rule.label} {change_text} ({rule.fmt(base)} → {rule.fmt(cur)})"
                 if svc == emitter or svc in implicated:
-                    out.append(Evidence(EvidenceKind.METRIC_DELTA, EvidenceStance.SUPPORTS, summary, rule.weight, data))
+                    out.append(
+                        Evidence(
+                            EvidenceKind.METRIC_DELTA, EvidenceStance.SUPPORTS, summary, rule.weight, data, ref=ref
+                        )
+                    )
                 elif svc in emitter_deps:
                     # A sick dependency suggests the fault sits further upstream than this hypothesis claims.
                     out.append(
@@ -234,12 +253,18 @@ class InvestigationEngine:
                             f"Dependency {summary}",
                             rule.weight,
                             data,
+                            ref=ref,
                         )
                     )
                 else:
                     out.append(
                         Evidence(
-                            EvidenceKind.METRIC_DELTA, EvidenceStance.CONTEXT, f"{summary}: downstream impact", 0, data
+                            EvidenceKind.METRIC_DELTA,
+                            EvidenceStance.CONTEXT,
+                            f"{summary}: downstream impact",
+                            0,
+                            data,
+                            ref=ref,
                         )
                     )
         for dep in sorted(emitter_deps & ctx.services.keys()):
@@ -251,6 +276,7 @@ class InvestigationEngine:
                         f"{dep} remains healthy: " + ", ".join(healthy[dep]),
                         0.15,
                         {"service": dep, "checks": healthy[dep]},
+                        ref=f"METRIC-{dep}-health",
                     )
                 )
         return out
@@ -267,6 +293,7 @@ class InvestigationEngine:
                     EvidenceKind.CHANGE_EVENT,
                     EvidenceStance.CONTEXT,
                     "No deployments, configuration changes or scheduled jobs in the 30 minutes before onset",
+                    ref="CHANGE-none",
                 )
             ]
         out = []
@@ -281,6 +308,7 @@ class InvestigationEngine:
                     f"{c.message} on {c.service} ({details}) {when}",
                     0.15 if c.service in related else 0,
                     {"service": c.service, "message": c.message, "ts": c.ts.isoformat(), "attributes": c.attributes},
+                    ref=f"CHANGE-{c.id}",
                 )
             )
         return out
@@ -304,6 +332,7 @@ class InvestigationEngine:
                     0.2 if rank == 0 else 0,
                     {"number": inc.number, "title": inc.title, "signature": inc.signature, "days_ago": days},
                     related_incident_id=inc.id,
+                    ref=inc.number,
                 )
             )
         return out
@@ -326,6 +355,8 @@ class InvestigationEngine:
                     "excerpt": p.content[:700],
                 },
                 document_id=p.document_id,
+                chunk_id=p.chunk_id,
+                ref=f"{DOC_PREFIX.get(p.category, 'DOC')}-{p.slug} §{p.section}",
             )
             for p in self.retriever.search(query, k=3, service=emitter, tags=tags)
         ]
@@ -412,4 +443,9 @@ class InvestigationEngine:
         result = max(candidates, key=lambda r: r.confidence) if candidates else self._unknown(ctx)
         order = {EvidenceStance.SUPPORTS: 0, EvidenceStance.CONTRADICTS: 1, EvidenceStance.CONTEXT: 2}
         result.evidence.sort(key=lambda e: (e.kind == EvidenceKind.DOCUMENT, order[e.stance], -e.weight))
+        seen: dict[str, int] = {}
+        for e in result.evidence:  # refs must be unique within a run (e.g. two parts of one section)
+            seen[e.ref] = seen.get(e.ref, 0) + 1
+            if seen[e.ref] > 1:
+                e.ref = f"{e.ref}#{seen[e.ref]}"
         return result

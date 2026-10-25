@@ -62,7 +62,10 @@ def test_seeded_payment_incident_page(client, demo):
     assert docs[0]["document"]["slug"] == "payment-gateway-timeout"
     assert docs[0]["data"]["section"] and docs[0]["data"]["excerpt"]  # a citable passage, not just a title
     assert "GatewayTimeoutException" in inv["search_query"]
-    assert inv["narrative"].startswith(inv["root_cause"])
+    # Every sentence of the write-up cites evidence of this run, and the check that proves it is stored.
+    assert inv["grounding"]["passed"] is True
+    assert f"[{log['ref']}]" in inv["narrative"] and log["ref"].startswith("LOG-")
+    assert docs[0]["ref"].startswith("RUNBOOK-payment-gateway-timeout §")
     assert not [e for e in inv["evidence"] if e["stance"] == "CONTRADICTS"]
 
 

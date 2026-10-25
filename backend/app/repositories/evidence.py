@@ -19,11 +19,14 @@ class LogPattern:
     message: str
     count: int
     first_seen: datetime
+    last_seen: datetime
     sample: dict[str, Any]
+    first_id: int  # id of the earliest matching line: what a citation like [LOG-48392] points at
 
 
 @dataclass(frozen=True)
 class LogEvent:
+    id: int
     ts: datetime
     service: str
     level: str
@@ -52,7 +55,9 @@ class EvidenceRepository:
                 ApplicationLog.message,
                 func.count(),
                 func.min(ApplicationLog.ts),
+                func.max(ApplicationLog.ts),
                 func.min(cast(ApplicationLog.attributes, Text)),  # deterministic sample (smallest JSON text)
+                func.min(ApplicationLog.id),
             )
             .join(Service, Service.id == ApplicationLog.service_id)
             .where(
@@ -65,8 +70,8 @@ class EvidenceRepository:
             .order_by(func.count().desc())
         ).all()
         return [
-            LogPattern(name, str(level), message, count, first, json.loads(sample) if sample else {})
-            for name, level, message, count, first, sample in rows
+            LogPattern(name, str(level), message, count, first, last, json.loads(sample) if sample else {}, first_id)
+            for name, level, message, count, first, last, sample, first_id in rows
         ]
 
     def logs_matching(self, markers: tuple[str, ...], start: datetime, end: datetime) -> list[LogEvent]:
@@ -74,7 +79,7 @@ class EvidenceRepository:
         if not markers:
             return []
         rows = self.db.execute(
-            select(ApplicationLog.ts, Service.name, ApplicationLog.level, ApplicationLog.message,
+            select(ApplicationLog.id, ApplicationLog.ts, Service.name, ApplicationLog.level, ApplicationLog.message,
                    ApplicationLog.attributes)
             .join(Service, Service.id == ApplicationLog.service_id)
             .where(
@@ -84,11 +89,11 @@ class EvidenceRepository:
             )
             .order_by(ApplicationLog.ts)
         ).all()  # fmt: skip
-        return [LogEvent(ts, svc, str(level), msg, attrs) for ts, svc, level, msg, attrs in rows]
+        return [LogEvent(id_, ts, svc, str(level), msg, attrs) for id_, ts, svc, level, msg, attrs in rows]
 
     def recent_problem_logs(self, service_ids: list[int], start: datetime, end: datetime, limit: int) -> list[LogEvent]:
         rows = self.db.execute(
-            select(ApplicationLog.ts, Service.name, ApplicationLog.level, ApplicationLog.message,
+            select(ApplicationLog.id, ApplicationLog.ts, Service.name, ApplicationLog.level, ApplicationLog.message,
                    ApplicationLog.attributes)
             .join(Service, Service.id == ApplicationLog.service_id)
             .where(
@@ -100,7 +105,7 @@ class EvidenceRepository:
             .order_by(ApplicationLog.ts.desc())
             .limit(limit)
         ).all()  # fmt: skip
-        return [LogEvent(ts, svc, str(level), msg, attrs) for ts, svc, level, msg, attrs in rows]
+        return [LogEvent(id_, ts, svc, str(level), msg, attrs) for id_, ts, svc, level, msg, attrs in rows]
 
     def metric_percentile(
         self, service_ids: list[int], names: list[str], start: datetime, end: datetime, q: float

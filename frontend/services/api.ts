@@ -65,16 +65,22 @@ export type EvidenceKind =
 export type EvidenceStance = "SUPPORTS" | "CONTRADICTS" | "CONTEXT";
 
 export interface Evidence {
-  id: number; position: number; kind: EvidenceKind; stance: EvidenceStance; summary: string; weight: number;
+  id: number; position: number; ref: string; kind: EvidenceKind; stance: EvidenceStance; summary: string; weight: number;
   data: Record<string, unknown>;
   related_incident: { id: number; number: string; title: string } | null;
   document: { id: number; slug: string; title: string; category: string } | null;
+}
+export interface GroundingCheck {
+  passed: boolean; cited: string[]; unknown_refs: string[]; uncited_sentences: string[]; unsupported_numbers: string[];
+}
+export interface Grounding extends Partial<GroundingCheck> {
+  rejected_llm_draft?: GroundingCheck; llm_error?: string;
 }
 export interface Investigation {
   id: number; status: "RUNNING" | "COMPLETED" | "FAILED"; engine: string; hypothesis_key: string | null;
   root_cause: string | null; narrative: string | null; search_query: string | null;
   confidence: number | null; recommended_steps: string[]; suggested_sql: string | null;
-  window_start: string; window_end: string; error: string | null; duration_ms: number | null;
+  window_start: string; window_end: string; error: string | null; grounding: Grounding; duration_ms: number | null;
   created_at: string; completed_at: string | null; requested_by: UserRef | null; evidence: Evidence[];
 }
 export interface LinkedTicket {

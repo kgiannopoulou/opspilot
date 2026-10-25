@@ -283,6 +283,32 @@ Logs · metrics · changes · history ─► evidence engine (scored hypothesis)
 `python -m app.scripts.reindex` syncs `knowledge-base/` (the API container runs it on start); only changed documents
 are re-chunked and re-embedded.
 
+## Evidence citations & grounding
+
+*"The payment gateway probably timed out"* is not useful during an outage. OpsPilot's write-ups cite every claim:
+
+> 35 GatewayTimeoutException events from payment-service between 09:06 and 09:39 UTC (none in the preceding 2 h)
+> **[LOG-5812]**. payment-service p95 latency increased 407% (1,049 ms → 5,321 ms) **[METRIC-payment-service-latency]**.
+> Similar to incident INC-106 (41 days ago): payment gateway (stripe) regional degradation pushed p95 above the 5 s
+> client timeout **[INC-106]**. postgres-primary remains healthy: query p95 latency 14 ms (baseline 13 ms)
+> **[METRIC-postgres-primary-health]**. See Payment Gateway Timeout Runbook §0 **[RUNBOOK-payment-gateway-timeout §0]**.
+>
+> *Grounding check passed · 7 citations verified* — the seeded payment incident, extractive writer
+
+- **Citation keys** are assigned by the evidence engine, never by the model: `LOG-<first log line id>`,
+  `METRIC-<service>-<metric>`, `CHANGE-<log id>`, the incident number for history, and
+  `RUNBOOK|GUIDE|ARCH|PROCESS-<slug> §<section>` for knowledge-base passages (the chunk is stored with the evidence).
+- **Grounding check** ([`grounding.py`](backend/app/ai/grounding.py)) runs on every write-up before it is stored:
+  1. every `[REF]` must exist in this investigation (an invented reference is the clearest hallucination signal);
+  2. every narrative sentence must cite something;
+  3. every number in a sentence must appear in the evidence *that sentence cites* — "5.3 s" fails when the evidence
+     says 5,321 ms, because the reader could not find it where the citation points. Numbers in the root cause must
+     exist somewhere in the evidence.
+- An LLM draft that fails is **not shown**: the extractive write-up (which passes by construction) is used, and the
+  rejected draft's report is stored in `ai_investigations.grounding`, so prompt or model changes can be evaluated by
+  their rejection rate. The UI shows the check result, renders citations as chips that jump to the evidence row, and
+  lists the cited sources.
+
 ## Repository structure
 
 ```
@@ -335,6 +361,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 9 | Analyst dashboard | ✅ |
 | 10 | Incident investigation page | ✅ |
 | 11 | RAG: knowledge base, chunking, embeddings, pgvector retrieval, LLM write-up | ✅ |
+| 12 | Evidence citations and grounding check | ✅ |
 
 ## License
 

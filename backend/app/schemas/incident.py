@@ -64,6 +64,7 @@ class DocumentRef(ORMModel):
 class EvidenceOut(ORMModel):
     id: int
     position: int
+    ref: str
     kind: EvidenceKind
     stance: EvidenceStance
     summary: str
@@ -87,6 +88,7 @@ class InvestigationOut(ORMModel):
     window_start: datetime
     window_end: datetime
     error: str | None
+    grounding: dict[str, Any]
     duration_ms: int | None
     created_at: datetime
     completed_at: datetime | None

@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import Priority, TicketEventType, TicketSource, TicketStatus
+from app.models.enums import Priority, TicketCategory, TicketEventType, TicketSource, TicketStatus
 from app.schemas.common import ORMModel, ServiceRef, UserRef
 
 Label = Annotated[str, Field(min_length=1, max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")]
@@ -44,6 +44,7 @@ class TicketOut(ORMModel):
     status: TicketStatus
     source: TicketSource
     labels: list[str]
+    category: TicketCategory | None
     resolution: str | None
     service: ServiceRef | None
     reporter: UserRef

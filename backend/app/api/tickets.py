@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models import Ticket, User
 from app.models.enums import Priority, TicketStatus
 from app.repositories.tickets import TicketFilters, TicketRepository
+from app.schemas.classification import ClassificationMetrics, ClassificationOut, ClassificationReview
 from app.schemas.common import Page
 from app.schemas.ticket import (
     CommentCreate,
@@ -20,6 +21,7 @@ from app.schemas.ticket import (
     TicketTransition,
     TicketUpdate,
 )
+from app.services.classification import ClassificationService
 from app.services.ticket_workflow import allowed_transitions
 from app.services.tickets import TicketService
 
@@ -56,7 +58,15 @@ def list_tickets(
 
 @router.post("", response_model=TicketOut, status_code=status.HTTP_201_CREATED)
 def create_ticket(data: TicketCreate, db: DB, user: Writer) -> TicketOut:
-    return to_out(TicketService(db).create(data, user))
+    ticket = TicketService(db).create(data, user)
+    ClassificationService(db).classify(ticket)  # a suggestion only; an analyst accepts or corrects it
+    return to_out(ticket)
+
+
+@router.get("/classifications/metrics", response_model=ClassificationMetrics)
+def classification_metrics(db: DB, _: Reader) -> ClassificationMetrics:
+    """Acceptance rate of AI triage suggestions and which fields analysts correct most."""
+    return ClassificationMetrics(**ClassificationService(db).metrics())
 
 
 @router.get("/{number}", response_model=TicketOut)
@@ -88,6 +98,31 @@ def list_comments(number: str, db: DB, _: Reader) -> list[CommentOut]:
 @router.post("/{number}/comments", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
 def add_comment(number: str, data: CommentCreate, db: DB, user: Writer) -> CommentOut:
     return CommentOut.model_validate(TicketService(db).comment(number, data, user))
+
+
+@router.get("/{number}/classification", response_model=ClassificationOut | None)
+def get_classification(number: str, db: DB, _: Reader) -> ClassificationOut | None:
+    latest = ClassificationService(db).latest(TicketService(db).get(number))
+    return ClassificationOut.model_validate(latest) if latest else None
+
+
+@router.post("/{number}/classification", response_model=ClassificationOut, status_code=status.HTTP_201_CREATED)
+def classify_ticket(number: str, db: DB, user: Writer) -> ClassificationOut:
+    """Ask for a fresh AI suggestion (supersedes one that is still pending)."""
+    return ClassificationOut.model_validate(ClassificationService(db).classify(TicketService(db).get(number), user))
+
+
+@router.post("/{number}/classification/{classification_id}/review", response_model=ClassificationOut)
+def review_classification(
+    number: str, classification_id: int, data: ClassificationReview, db: DB, user: Writer
+) -> ClassificationOut:
+    """Accept, modify or reject a suggestion. Only accepted/modified values are applied to the ticket."""
+    service = ClassificationService(db)
+    row = service.review(
+        TicketService(db).get(number, for_update=True), classification_id, data.action, user,
+        category=data.category, priority=data.priority, service=data.service, note=data.note,
+    )  # fmt: skip
+    return ClassificationOut.model_validate(row)
 
 
 @router.get("/{number}/events", response_model=list[TicketEventOut])

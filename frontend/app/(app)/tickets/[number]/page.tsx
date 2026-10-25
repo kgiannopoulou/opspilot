@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use, useState } from "react";
+import { TriageSuggestion, categoryLabel } from "@/components/TriageSuggestion";
 import { Card, ErrorBox, PriorityBadge, Spinner, StatusBadge, relativeTime, utcDateTime } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +20,9 @@ function describe(e: TicketEvent): string {
     case "ASSIGNED": return e.to_value ? `assigned to ${e.to_value}` : "unassigned the ticket";
     case "COMMENTED": return "commented";
     case "LINKED_TO_INCIDENT": return `linked to incident ${e.to_value}`;
+    case "CATEGORY_CHANGED": return `set category ${e.from_value ? `${e.from_value} → ` : ""}${e.to_value}`;
+    case "AI_CLASSIFIED": return `suggested ${e.to_value} (AI, ${Math.round(Number(e.data.confidence ?? 0) * 100)}% confidence)`;
+    case "AI_SUGGESTION_REVIEWED": return `${(e.to_value ?? "reviewed").toLowerCase()} the AI suggestion`;
     default: return e.type.toLowerCase().replaceAll("_", " ");
   }
 }
@@ -116,8 +120,10 @@ export default function TicketPage({ params }: { params: Promise<{ number: strin
           </Card>
         </div>
         <div className="space-y-4">
+          <TriageSuggestion number={t.number} canWrite={canWrite} onChanged={refresh} />
           <Card title="Details">
             <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-sm">
+              <dt className="text-slate-500">Category</dt><dd>{t.category ? categoryLabel(t.category) : "—"}</dd>
               <dt className="text-slate-500">Service</dt><dd>{t.service?.name ?? "—"}</dd>
               <dt className="text-slate-500">Reporter</dt><dd>{t.reporter.full_name}</dd>
               <dt className="text-slate-500">Assignee</dt>

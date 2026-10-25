@@ -88,11 +88,11 @@ def check(narrative: str, root_cause: str, evidence: list[Evidence], allowed_tex
         report.cited.extend(r for r in refs if r in by_ref and r not in report.cited)
         # Section numbers inside the markers ("§3.2") are not claims.
         cited_numbers = set().union(*(_numbers(_evidence_text(e)) for e in known)) if known else set()
-        for n in _numbers(strip_citations(sentence)) - cited_numbers - allowed_numbers:
+        for n in sorted(_numbers(strip_citations(sentence)) - cited_numbers - allowed_numbers):
             report.unsupported_numbers.append(f"{n} in: {strip_citations(sentence)[:120]}")
 
     all_numbers = set().union(*(_numbers(_evidence_text(e)) for e in evidence)) if evidence else set()
-    for n in _numbers(strip_citations(root_cause)) - all_numbers - allowed_numbers:
+    for n in sorted(_numbers(strip_citations(root_cause)) - all_numbers - allowed_numbers):
         report.unsupported_numbers.append(f"{n} in root cause")
     report.unknown_refs.extend(r for r in citations(root_cause) if r not in by_ref)
 

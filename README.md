@@ -309,6 +309,43 @@ are re-chunked and re-embedded.
   their rejection rate. The UI shows the check result, renders citations as chips that jump to the evidence row, and
   lists the cited sources.
 
+## AI ticket triage (human in the loop)
+
+When a ticket arrives — *"Customers cannot complete checkout. The payment page freezes."* — OpsPilot suggests how
+to triage it:
+
+```json
+{ "category": "PAYMENTS", "priority": "P1", "service": "payment-service", "confidence": 0.74,
+  "rationale": "Payments keywords: checkout, payment. Priority P1 (failing: cannot, freezes; breadth: Customers; core flow: payments)." }
+```
+
+The suggestion is stored as a **PENDING** `ticket_classifications` row and the ticket is **not changed**. An analyst
+then chooses on the ticket page:
+
+| Action | Effect |
+|---|---|
+| **Accept** | Category, priority and service are applied; timeline + audit record who accepted it |
+| **Modify** | The analyst's values are applied; the prediction is kept next to them (`final_*` columns) |
+| **Reject** | Nothing is applied |
+
+- **Engines** ([`classifier.py`](backend/app/ai/classifier.py)): `keywords-v1` is transparent — category lexicons,
+  impact phrases for priority (*failing* × *breadth* × *core flow*, mirroring the severity table in the incident
+  process document), service from an explicit mention, the category, the product area or, as a last resort, the
+  best-matching knowledge-base document. With an LLM configured, Claude answers through a JSON schema whose enums
+  *are* the categories, priorities and service names from the catalogue, so it cannot invent a service; any failure
+  falls back to the keyword engine.
+- **Feedback loop** — because predictions are never overwritten, every reviewed row is a labelled example.
+  `GET /api/v1/tickets/classifications/metrics` reports the acceptance rate and which fields analysts correct most:
+  the number to watch before trusting a new model or prompt.
+- Re-running the classifier supersedes a pending suggestion; a reviewed suggestion cannot be reviewed again (409).
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/tickets/{number}/classification` | Latest suggestion and its review |
+| `POST` | `/api/v1/tickets/{number}/classification` | Request a fresh suggestion (`tickets:write`) |
+| `POST` | `/api/v1/tickets/{number}/classification/{id}/review` | `{"action": "accept" \| "modify" \| "reject", ...}` |
+| `GET` | `/api/v1/tickets/classifications/metrics` | Acceptance rate and corrections per field |
+
 ## Repository structure
 
 ```
@@ -362,6 +399,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 10 | Incident investigation page | ✅ |
 | 11 | RAG: knowledge base, chunking, embeddings, pgvector retrieval, LLM write-up | ✅ |
 | 12 | Evidence citations and grounding check | ✅ |
+| 13 | AI ticket classification with human review | ✅ |
 
 ## License
 

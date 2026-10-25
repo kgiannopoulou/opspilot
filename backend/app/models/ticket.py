@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
-from app.models.enums import Priority, TicketEventType, TicketSource, TicketStatus, db_enum
+from app.models.enums import Priority, TicketCategory, TicketEventType, TicketSource, TicketStatus, db_enum
 from app.models.service import Service
 from app.models.user import User
 
@@ -32,6 +32,8 @@ class Ticket(TimestampMixin, Base):
         db_enum(TicketSource, "ticket_source"), server_default=TicketSource.CUSTOMER_SUPPORT.value
     )
     labels: Mapped[list[str]] = mapped_column(ARRAY(String(40)), server_default="{}")
+    # Set by triage (an analyst, or an AI suggestion an analyst accepted) — never by the model alone.
+    category: Mapped[TicketCategory | None] = mapped_column(db_enum(TicketCategory, "ticket_category"))
     resolution: Mapped[str | None] = mapped_column(Text)
 
     service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id", ondelete="SET NULL"))

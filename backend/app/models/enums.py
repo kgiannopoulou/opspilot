@@ -33,6 +33,27 @@ class TicketEventType(StrEnum):
     ASSIGNED = "ASSIGNED"
     COMMENTED = "COMMENTED"
     LINKED_TO_INCIDENT = "LINKED_TO_INCIDENT"
+    CATEGORY_CHANGED = "CATEGORY_CHANGED"
+    AI_CLASSIFIED = "AI_CLASSIFIED"
+    AI_SUGGESTION_REVIEWED = "AI_SUGGESTION_REVIEWED"
+
+
+class TicketCategory(StrEnum):
+    PAYMENTS = "PAYMENTS"
+    AUTHENTICATION = "AUTHENTICATION"
+    ORDERS = "ORDERS"
+    NOTIFICATIONS = "NOTIFICATIONS"
+    DATABASE = "DATABASE"
+    PERFORMANCE = "PERFORMANCE"
+    OTHER = "OTHER"
+
+
+class ClassificationStatus(StrEnum):
+    PENDING = "PENDING"  # waiting for a human
+    ACCEPTED = "ACCEPTED"  # applied as suggested
+    MODIFIED = "MODIFIED"  # applied with corrections
+    REJECTED = "REJECTED"  # not applied
+    SUPERSEDED = "SUPERSEDED"  # replaced by a newer suggestion before anyone reviewed it
 
 
 class Severity(StrEnum):

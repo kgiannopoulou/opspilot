@@ -41,10 +41,18 @@ export interface DashboardSummary {
 
 export interface Ticket {
   id: number; number: string; title: string; description: string; priority: Priority; status: TicketStatus;
-  source: string; labels: string[]; resolution: string | null; service: ServiceRef | null;
+  source: string; labels: string[]; category: TicketCategory | null; resolution: string | null; service: ServiceRef | null;
   reporter: UserRef; assignee: UserRef | null; created_at: string; updated_at: string;
   triaged_at: string | null; resolved_at: string | null; closed_at: string | null;
   allowed_transitions: TicketStatus[];
+}
+export type TicketCategory = "PAYMENTS" | "AUTHENTICATION" | "ORDERS" | "NOTIFICATIONS" | "DATABASE" | "PERFORMANCE" | "OTHER";
+export interface Classification {
+  id: number; engine: string; category: TicketCategory; priority: Priority; service: ServiceRef | null; confidence: number;
+  rationale: string; signals: Record<string, unknown>;
+  status: "PENDING" | "ACCEPTED" | "MODIFIED" | "REJECTED" | "SUPERSEDED";
+  final_category: TicketCategory | null; final_priority: Priority | null; final_service: ServiceRef | null;
+  review_note: string | null; reviewed_by: UserRef | null; reviewed_at: string | null; created_at: string;
 }
 export interface TicketComment { id: number; body: string; internal: boolean; author: UserRef; created_at: string }
 export interface TicketEvent {

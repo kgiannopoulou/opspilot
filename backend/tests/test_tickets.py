@@ -32,7 +32,7 @@ def test_create_ticket_assigns_number_and_records_event(client, seeded):
     assert ticket["allowed_transitions"] == ["TRIAGED", "INVESTIGATING", "CLOSED"]
 
     events = client.get(f"{API}/{ticket['number']}/events", headers=as_user(seeded["agent"])).json()
-    assert [e["type"] for e in events] == ["CREATED"]
+    assert [e["type"] for e in events] == ["CREATED", "AI_CLASSIFIED"]  # triage suggestion, not applied
 
 
 def test_unknown_service_is_rejected(client, seeded):

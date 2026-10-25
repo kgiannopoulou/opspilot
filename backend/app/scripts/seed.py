@@ -10,6 +10,7 @@ What gets loaded:
   * the customer tickets those live incidents caused, plus an everyday backlog
   * the knowledge base (runbooks, troubleshooting guides, architecture notes)
   * completed investigations for two of the live incidents; the newest one is left for you to investigate
+  * AI triage suggestions for open tickets: incident tickets accepted, one corrected, the rest awaiting review
 """
 
 from __future__ import annotations
@@ -25,10 +26,11 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.models import Base, Incident, IncidentTicket, Role, Service, Ticket, User
-from app.models.enums import IncidentStatus, Priority, Severity, TicketSource, TicketStatus
+from app.models.enums import IncidentStatus, Priority, Severity, TicketCategory, TicketSource, TicketStatus
 from app.repositories.observability import bulk_insert_logs, bulk_insert_metrics
 from app.repositories.tickets import TicketRepository
 from app.schemas.ticket import CommentCreate, TicketCreate, TicketTransition
+from app.services.classification import ClassificationService
 from app.services.incidents import IncidentService
 from app.services.investigations import InvestigationService
 from app.services.knowledge import load_knowledge_base
@@ -356,6 +358,7 @@ def seed(db: Session, now: datetime | None = None) -> None:
     load_knowledge_base(db)
     seed_live(db, now, users, services)
     seed_backlog(db, users)
+    seed_triage(db, users)
 
 
 def seed_backlog(db: Session, users: dict[str, User]) -> None:
@@ -382,6 +385,21 @@ def seed_backlog(db: Session, users: dict[str, User]) -> None:
             needs_note = status in {TicketStatus.RESOLVED, TicketStatus.CLOSED}
             note = "Handled — see ticket history." if needs_note else None
             tickets.transition(ticket.number, TicketTransition(status=status, resolution=note), alex)
+
+
+def seed_triage(db: Session, users: dict[str, User]) -> None:
+    """Classify every ticket still in the queue, and show both outcomes of human review."""
+    classifier = ClassificationService(db)
+    maria, sam = users["maria@opspilot.dev"], users["sam@opspilot.dev"]
+    linked = set(db.scalars(select(IncidentTicket.ticket_id)))
+    open_tickets = db.scalars(select(Ticket).where(Ticket.status != TicketStatus.CLOSED).order_by(Ticket.id))
+    for ticket in list(open_tickets):
+        suggestion = classifier.classify(ticket)
+        if ticket.id in linked:
+            classifier.review(ticket, suggestion.id, "accept", maria)
+        elif ticket.title.startswith("MFA code"):
+            classifier.review(ticket, suggestion.id, "modify", sam, category=TicketCategory.NOTIFICATIONS,
+                              priority=Priority.P3, note="Single relay, a few merchants: P3")  # fmt: skip
 
 
 def main() -> None:

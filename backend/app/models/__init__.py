@@ -2,6 +2,7 @@
 
 from app.models.audit import AuditEvent
 from app.models.base import Base
+from app.models.classification import TicketClassification
 from app.models.incident import Incident, IncidentTicket, incident_services
 from app.models.investigation import AIEvidence, AIInvestigation
 from app.models.knowledge import DocumentChunk, KnowledgeDocument
@@ -25,6 +26,7 @@ __all__ = [
     "Role",
     "Service",
     "Ticket",
+    "TicketClassification",
     "TicketComment",
     "TicketEvent",
     "User",

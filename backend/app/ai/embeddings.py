@@ -64,7 +64,7 @@ SYNONYMS = {
 }
 
 
-def _stem(word: str) -> str:
+def stem(word: str) -> str:
     for suffix in ("ing", "ed", "es", "s"):
         if len(word) > len(suffix) + 3 and word.endswith(suffix):
             return word[: -len(suffix)]
@@ -78,10 +78,10 @@ def tokenize(text: str) -> list[str]:
         for word in dict.fromkeys([raw.lower(), *(p.lower() for p in parts)]):  # ordered: bigrams must be stable
             if word in STOPWORDS or len(word) < 2:
                 continue
-            stem = _stem(word)
-            tokens.append(stem)
-            if stem in SYNONYMS:
-                tokens.append(SYNONYMS[stem])
+            root = stem(word)
+            tokens.append(root)
+            if root in SYNONYMS:
+                tokens.append(SYNONYMS[root])
     return tokens
 
 

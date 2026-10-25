@@ -98,5 +98,6 @@ def test_llm_draft_failing_the_check_is_replaced_by_the_extractive_one():
     assert draft.writer == "extractive-v1" and draft.root_cause == ROOT_CAUSE
     assert draft.grounding["passed"] is True
     rejected = draft.grounding["rejected_llm_draft"]
-    assert rejected["unknown_refs"] == ["STATUS-stripe"] and "20 in: Stripe" in rejected["unsupported_numbers"][0]
+    assert rejected["unknown_refs"] == ["STATUS-stripe"]
+    assert [n.split(" in:")[0] for n in rejected["unsupported_numbers"]] == ["14", "20"]
     assert draft.narrative.startswith("31 GatewayTimeoutException events") and "[LOG-48392]" in draft.narrative

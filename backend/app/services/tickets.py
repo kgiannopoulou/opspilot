@@ -37,9 +37,11 @@ class TicketService:
             raise ValidationFailed(f"unknown service {name!r}")
         return service.id
 
-    def _event(self, ticket: Ticket, actor: User, type_: TicketEventType, **kwargs: object) -> None:
-        """Timeline entry for the UI plus an audit row, both inside the current transaction."""
-        self.tickets.add_event(TicketEvent(ticket_id=ticket.id, actor_id=actor.id, type=type_, **kwargs))
+    def _event(self, ticket: Ticket, actor: User | None, type_: TicketEventType, **kwargs: object) -> None:
+        """Timeline entry for the UI plus an audit row, both inside the current transaction (actor None = system)."""
+        self.tickets.add_event(
+            TicketEvent(ticket_id=ticket.id, actor_id=actor.id if actor else None, type=type_, **kwargs)
+        )
         changes = {k: v for k, v in kwargs.items() if v not in (None, {})}
         audit.record(self.db, actor, f"ticket.{type_.value.lower()}", "ticket", ticket.number, changes)
 

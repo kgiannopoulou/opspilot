@@ -79,6 +79,8 @@ class InvestigationOut(ORMModel):
     engine: str
     hypothesis_key: str | None
     root_cause: str | None
+    narrative: str | None
+    search_query: str | None
     confidence: float | None
     recommended_steps: list[str]
     suggested_sql: str | None

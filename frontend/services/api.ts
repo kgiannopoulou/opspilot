@@ -72,7 +72,8 @@ export interface Evidence {
 }
 export interface Investigation {
   id: number; status: "RUNNING" | "COMPLETED" | "FAILED"; engine: string; hypothesis_key: string | null;
-  root_cause: string | null; confidence: number | null; recommended_steps: string[]; suggested_sql: string | null;
+  root_cause: string | null; narrative: string | null; search_query: string | null;
+  confidence: number | null; recommended_steps: string[]; suggested_sql: string | null;
   window_start: string; window_end: string; error: string | null; duration_ms: number | null;
   created_at: string; completed_at: string | null; requested_by: UserRef | null; evidence: Evidence[];
 }
@@ -89,9 +90,15 @@ export interface IncidentTelemetry {
 }
 export interface LogLine { ts: string; service: string; level: string; message: string; attributes: Record<string, unknown> }
 export interface KnowledgeDoc {
-  id: number; slug: string; title: string; category: "runbook" | "troubleshooting" | "architecture";
+  id: number; slug: string; title: string; category: "runbook" | "troubleshooting" | "architecture" | "process";
   service: ServiceRef | null; tags: string[]; updated_at: string; content?: string;
 }
+
+export interface SearchHit {
+  chunk_id: number; slug: string; title: string; category: string; section: string; heading: string; content: string;
+  similarity: number; score: number;
+}
+export interface SearchResults { query: string; embedding_model: string; hits: SearchHit[] }
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

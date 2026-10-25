@@ -5,14 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.engine import ENGINE_VERSION, InvestigationEngine
+from app.ai.writer import Writer, get_writer
 from app.models import AIEvidence, AIInvestigation, Incident, User
 from app.models.enums import InvestigationStatus
 from app.services import audit
 
 
 class InvestigationService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, writer: Writer | None = None) -> None:
         self.db = db
+        self.writer = writer
 
     def latest(self, incident: Incident) -> AIInvestigation | None:
         return self.db.scalar(
@@ -44,8 +46,10 @@ class InvestigationService:
             window_start=incident.started_at,
             window_end=incident.resolved_at or now or datetime.now(UTC),
         )
+        writer = self.writer or get_writer()
         try:
             result = InvestigationEngine(self.db).investigate(incident)
+            draft = writer.write(incident, result)
         except Exception as exc:  # noqa: BLE001 — persisted for the analyst, then re-raised below
             self.db.rollback()
             run.status = InvestigationStatus.FAILED
@@ -57,10 +61,13 @@ class InvestigationService:
             raise
 
         run.status = InvestigationStatus.COMPLETED
+        run.engine = f"{ENGINE_VERSION}+rag/{draft.writer}"[:64]
         run.hypothesis_key = result.hypothesis_key
-        run.root_cause = result.root_cause
+        run.root_cause = draft.root_cause
+        run.narrative = draft.narrative
+        run.search_query = result.search_query
         run.confidence = result.confidence
-        run.recommended_steps = result.recommended_steps
+        run.recommended_steps = draft.recommended_steps
         run.suggested_sql = result.suggested_sql
         run.window_start, run.window_end = result.window_start, result.window_end
         run.evidence = [

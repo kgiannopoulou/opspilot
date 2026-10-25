@@ -38,9 +38,13 @@ class AIInvestigation(Base):
     status: Mapped[InvestigationStatus] = mapped_column(
         db_enum(InvestigationStatus, "investigation_status"), server_default=InvestigationStatus.RUNNING.value
     )
-    engine: Mapped[str] = mapped_column(String(40))  # e.g. "rules-v1"; later "rag-claude"
+    engine: Mapped[str] = mapped_column(String(64))  # evidence engine + writer, e.g. "rules-v1+rag/extractive-v1"
     hypothesis_key: Mapped[str | None] = mapped_column(String(64))
     root_cause: Mapped[str | None] = mapped_column(Text)
+    # Prose written from the collected evidence (by the LLM, or extractively when none is configured).
+    narrative: Mapped[str | None] = mapped_column(Text)
+    # The semantic-search query generated from the incident, kept so retrieval can be audited and replayed.
+    search_query: Mapped[str | None] = mapped_column(Text)
     confidence: Mapped[float | None] = mapped_column(Numeric(4, 3, asdecimal=False))
     # Ordered lists whose shape is owned by the engine version — JSONB keeps them with the run that produced them.
     recommended_steps: Mapped[list[str]] = mapped_column(JSONB, server_default="[]")

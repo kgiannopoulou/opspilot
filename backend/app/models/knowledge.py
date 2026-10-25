@@ -43,8 +43,13 @@ class DocumentChunk(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("knowledge_documents.id", ondelete="CASCADE"))
     chunk_index: Mapped[int] = mapped_column(Integer)
+    # Numbered from the Markdown headings ("2", "2.1"): what an investigation cites, e.g. [RUNBOOK-x §2].
+    section: Mapped[str] = mapped_column(String(16), server_default="0")
+    heading: Mapped[str] = mapped_column(String(200), server_default="")
     content: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+    # Vectors from different models are not comparable: a model switch must re-embed every chunk.
+    embedding_model: Mapped[str | None] = mapped_column(String(64))
 
     document: Mapped[KnowledgeDocument] = relationship()

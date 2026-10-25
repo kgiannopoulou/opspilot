@@ -84,6 +84,7 @@ def test_reusing_a_rotated_refresh_token_revokes_the_whole_family(client, seeded
     stolen = client.cookies.get("opspilot_refresh")
     assert client.post(f"{AUTH}/refresh").status_code == 200  # legitimate rotation
 
+    client.cookies.clear()  # drop the rotated cookie so only the stolen one is sent
     client.cookies.set("opspilot_refresh", stolen, path="/api/v1/auth")
     assert client.post(f"{AUTH}/refresh").status_code == 401  # replay detected
 

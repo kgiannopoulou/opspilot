@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import Text, cast, func, select
 from sqlalchemy.orm import Session
 
-from app.models import ApplicationLog, Incident, KnowledgeDocument, MetricSample, Service
+from app.models import ApplicationLog, Incident, MetricSample, Service
 from app.models.enums import IncidentStatus, LogLevel
 
 
@@ -149,9 +149,3 @@ class EvidenceRepository:
                 .order_by(Incident.started_at.desc())
             ).unique()
         )
-
-    def documents_tagged(self, tags: tuple[str, ...]) -> list[KnowledgeDocument]:
-        """Documents sharing at least one tag (array overlap, served by the GIN index)."""
-        if not tags:
-            return []
-        return list(self.db.scalars(select(KnowledgeDocument).where(KnowledgeDocument.tags.overlap(list(tags)))))

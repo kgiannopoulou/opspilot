@@ -211,7 +211,7 @@ probable root cause, without opening five tools.
      **contradicts** the hypothesis and lowers confidence.
    - *Change events:* config reloads, scheduled jobs and deployments in the 30 minutes before onset.
    - *History:* resolved incidents with a matching error signature (*"Similar to INC-106, 41 days ago"*).
-   - *Knowledge base:* runbooks and guides whose tags match, cited as relevant documentation.
+   - *Knowledge base:* runbook passages found by semantic search (see [RAG](#retrieval-augmented-generation-rag)).
 3. **Hypotheses** ([`hypotheses.py`](backend/app/ai/hypotheses.py)) are proposed by log signatures and scored *only*
    from the evidence: `confidence = (1 − Π(1 − w) over supporting) × Π(1 − w) over contradicting`, capped at 97 %.
    The best-supported one wins. Root-cause text, steps and SQL are templates filled from real log attributes
@@ -243,8 +243,45 @@ loaded idempotently by content hash and browsable at `/knowledge`.
 | `GET` | `/api/v1/incidents/{number}/logs?limit=` | Recent WARN/ERROR lines since onset |
 | `GET` | `/api/v1/knowledge`, `/api/v1/knowledge/{slug}` | Knowledge base |
 
-The engine is deliberately LLM-free: it is deterministic, testable and fast (~20 ms). A later RAG step will use
-`pgvector` retrieval and an LLM to *summarise* the same stored evidence, never to add facts (ADR 0004).
+The evidence engine itself is deliberately LLM-free: deterministic, testable and fast (~20 ms). Language models only
+enter at the write-up stage, below, and may only explain evidence that is already stored (ADR 0004).
+
+## Retrieval-augmented generation (RAG)
+
+```
+Incident ─► search query ─► embedding ─► pgvector HNSW (cosine) ─► re-rank ─► runbook passages ─┐
+Logs · metrics · changes · history ─► evidence engine (scored hypothesis) ───────────────────────┴─► writer ─► investigation
+```
+
+- **Knowledge base** — 12 fictional ShopStream documents in [`knowledge-base/`](knowledge-base/): runbooks (payment
+  gateway timeout, DB connection pool, SMTP rotation, high CPU), troubleshooting guides (checkout, password reset,
+  slow dashboard, database), architecture notes (payment and authentication services) and the incident response
+  process.
+- **Chunking** ([`chunking.py`](backend/app/ai/chunking.py)) — split on `##`/`###` headings so every chunk belongs to one
+  numbered section (`§2`, `§2.1`) that can be cited; long sections are split on paragraphs. The embedded text is
+  prefixed with *document › heading* so "1. Check the status page" still means something on its own.
+- **Embeddings** ([`embeddings.py`](backend/app/ai/embeddings.py)) — pluggable. The default `hashing-v1` is a
+  deterministic, dependency-free feature-hashed embedding (camelCase splitting, stemming, an ops synonym table that
+  maps *freezes → timeout*, *slow → latency*) so CI and laptops need no model download. `fastembed`
+  (BAAI/bge-small-en-v1.5, `pip install -r requirements-ml.txt`) has the same 384 dimensions — switching is a config
+  change, and because each chunk records the model that embedded it, a switch re-embeds everything automatically.
+- **Storage & search** — `document_chunks.embedding vector(384)` with an HNSW `vector_cosine_ops` index. Retrieval
+  ([`retrieval.py`](backend/app/ai/retrieval.py)) is hybrid: cosine similarity plus small, explainable boosts for the
+  affected service's documents and for curated tags matching the error signature; at most two passages per document.
+- **Query generation** — built from the incident title, the matched log signature and corroborating messages, and
+  stored on the investigation (`search_query`) so retrieval can be audited. For *unknown* failure modes the query
+  uses the strongest new log signal, so a runbook can still help where no hypothesis exists.
+- **Writer** ([`writer.py`](backend/app/ai/writer.py)) — with `OPSPILOT_LLM_PROVIDER=anthropic` Claude writes the root
+  cause, a short narrative and the next steps from the evidence and passages, through a JSON-schema constrained call
+  ([`llm.py`](backend/app/ai/llm.py)). Without a key — or when the call fails — an extractive writer composes the
+  same sections from the evidence summaries, so the product never depends on an LLM being up.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/knowledge/search?q=&k=&service=` | Semantic search over passages (the retrieval investigations use) |
+
+`python -m app.scripts.reindex` syncs `knowledge-base/` (the API container runs it on start); only changed documents
+are re-chunked and re-embedded.
 
 ## Repository structure
 
@@ -259,12 +296,12 @@ opspilot/
 │   │   ├── schemas/     Pydantic request/response contracts
 │   │   ├── services/    business rules, one transaction per use case
 │   │   ├── repositories/ database access
-│   │   ├── ai/          investigation engine
+│   │   ├── ai/          evidence engine, chunking, embeddings, retrieval, LLM writer
 │   │   ├── workers/     background jobs
 │   │   └── core/        config, database, security
 │   └── tests/
 ├── simulator/           ShopStream environment (log_generator/, metric_generator/, incidents/)
-├── knowledge-base/      runbooks/, troubleshooting/, architecture/
+├── knowledge-base/      runbooks/, troubleshooting/, architecture/, process/
 ├── infrastructure/      docker/ (Dockerfiles), terraform/ (planned)
 ├── docs/                architecture/, decisions/, screenshots/
 ├── .github/workflows/   CI: backend lint + tests, frontend typecheck + build, Docker build
@@ -297,6 +334,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 8 | Authentication & RBAC | ✅ |
 | 9 | Analyst dashboard | ✅ |
 | 10 | Incident investigation page | ✅ |
+| 11 | RAG: knowledge base, chunking, embeddings, pgvector retrieval, LLM write-up | ✅ |
 
 ## License
 

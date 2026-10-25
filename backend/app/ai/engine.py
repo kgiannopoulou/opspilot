@@ -21,6 +21,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.ai.hypotheses import CHANGE_MARKERS, HYPOTHESES, UNKNOWN_STEPS, Hypothesis
+from app.ai.retrieval import KnowledgeRetriever, build_query
 from app.models import Incident, Service
 from app.models.enums import EvidenceKind, EvidenceStance
 from app.repositories.evidence import EvidenceRepository, LogPattern
@@ -81,6 +82,7 @@ class InvestigationResult:
     evidence: list[Evidence]
     window_start: datetime
     window_end: datetime
+    search_query: str | None = None
 
 
 class _Defaults(dict[str, Any]):
@@ -128,6 +130,7 @@ class InvestigationEngine:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repo = EvidenceRepository(db)
+        self.retriever = KnowledgeRetriever(db)
 
     # -- context ---------------------------------------------------------------------------------------------
 
@@ -305,23 +308,26 @@ class InvestigationEngine:
             )
         return out
 
-    def _documents(self, tags: tuple[str, ...], emitter: str) -> list[Evidence]:
-        wanted = {t.lower() for t in tags}
-
-        def relevance(doc: Any) -> tuple[int, int]:
-            overlap = len(wanted & {t.lower() for t in doc.tags})
-            return (overlap + (1 if doc.service and doc.service.name == emitter else 0), -doc.id)
-
-        docs = sorted(self.repo.documents_tagged(tags), key=relevance, reverse=True)[:3]
+    def _documents(self, query: str, emitter: str, tags: tuple[str, ...] = ()) -> list[Evidence]:
+        """Runbook passages retrieved by semantic search (RAG), cited down to the section."""
         return [
             Evidence(
                 EvidenceKind.DOCUMENT,
                 EvidenceStance.CONTEXT,
-                d.title,
-                data={"slug": d.slug, "category": d.category.value},
-                document_id=d.id,
+                f"{p.title} §{p.section} {p.heading}",
+                data={
+                    "slug": p.slug,
+                    "category": p.category,
+                    "chunk_id": p.chunk_id,
+                    "section": p.section,
+                    "heading": p.heading,
+                    "similarity": p.similarity,
+                    "score": p.score,
+                    "excerpt": p.content[:700],
+                },
+                document_id=p.document_id,
             )
-            for d in docs
+            for p in self.retriever.search(query, k=3, service=emitter, tags=tags)
         ]
 
     # -- hypotheses ------------------------------------------------------------------------------------------
@@ -334,13 +340,16 @@ class InvestigationEngine:
         corroborating = [p for p in ctx.patterns if any(c.lower() in p.message.lower() for c in hyp.corroborating)]
         implicated = set(hyp.implicates)
         related = {pattern.service, *implicated}
+        query = build_query(
+            ctx.incident.title, hyp.signature, pattern.message, *(p.message for p in corroborating), pattern.service
+        )
 
         evidence = [
             *self._log_evidence(ctx, pattern, corroborating),
             *self._metric_evidence(ctx, pattern.service, implicated),
             *self._change_evidence(ctx, related),
             *self._similar_incidents(ctx, hyp.signature),
-            *self._documents(hyp.doc_tags, pattern.service),
+            *self._documents(query, pattern.service, hyp.doc_tags),
         ]
         values = {**pattern.sample, "service": pattern.service, "count": pattern.count,
                   "minutes": math.ceil(ctx.minutes)}  # fmt: skip
@@ -353,6 +362,7 @@ class InvestigationEngine:
             evidence=evidence,
             window_start=ctx.start,
             window_end=ctx.end,
+            search_query=query,
         )
 
     def _unknown(self, ctx: _Context) -> InvestigationResult:
@@ -369,11 +379,15 @@ class InvestigationEngine:
                 window_end=ctx.end,
             )
         top = new[0]
+        # No known failure mode matched, so the knowledge base is searched with the strongest new signal: a runbook
+        # may still describe it even though no hypothesis encodes it.
+        query = build_query(ctx.incident.title, top.message, top.service)
         evidence = [
             *self._log_evidence(ctx, top, []),
             *self._metric_evidence(ctx, top.service, set()),
             *self._change_evidence(ctx, {top.service}),
             *self._similar_incidents(ctx, top.message),
+            *self._documents(query, top.service),
         ]
         team = ctx.services[top.service].owner_team if top.service in ctx.services else "owning"
         values = {"message": top.message, "service": top.service, "team": team}
@@ -389,6 +403,7 @@ class InvestigationEngine:
             evidence=evidence,
             window_start=ctx.start,
             window_end=ctx.end,
+            search_query=query,
         )
 
     def investigate(self, incident: Incident) -> InvestigationResult:

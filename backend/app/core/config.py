@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_lockout_minutes: int = 15
 
+    # AI. Everything works with the defaults: deterministic embeddings and an extractive writer, no API keys needed.
+    embedding_provider: str = "hashing"  # "hashing" | "fastembed"
+    llm_provider: str = "none"  # "none" | "anthropic" (reads ANTHROPIC_API_KEY)
+    llm_model: str = "claude-opus-5-5"
+    llm_effort: str = "medium"
+    llm_timeout_seconds: float = 60.0
+
     @model_validator(mode="after")
     def _require_real_secret_outside_dev(self) -> "Settings":
         if self.environment not in {"development", "test"} and (

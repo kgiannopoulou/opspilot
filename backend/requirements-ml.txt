@@ -1,0 +1,3 @@
+# Optional: real sentence embeddings (OPSPILOT_EMBEDDING_PROVIDER=fastembed). Not needed for CI or the demo.
+-r requirements.txt
+fastembed==0.9.1

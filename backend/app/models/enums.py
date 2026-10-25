@@ -60,6 +60,7 @@ class DocumentCategory(StrEnum):
     RUNBOOK = "runbook"
     TROUBLESHOOTING = "troubleshooting"
     ARCHITECTURE = "architecture"
+    PROCESS = "process"
 
 
 class InvestigationStatus(StrEnum):

@@ -125,6 +125,9 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
   const findings = inv.evidence.filter((e) => e.kind !== "DOCUMENT");
   const docs = inv.evidence.filter((e) => e.kind === "DOCUMENT" && e.document);
   const supporting = findings.filter((e) => e.stance === "SUPPORTS").length;
+  // The extractive write-up repeats the root cause as its first sentence; show only what it adds.
+  const narrative = inv.narrative && inv.root_cause && inv.narrative.startsWith(inv.root_cause)
+    ? inv.narrative.slice(inv.root_cause.length).trim() : inv.narrative;
 
   return (
     <Card title="AI investigation" action={runButton}>
@@ -132,6 +135,7 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
         <div>
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Probable root cause</div>
           <p className="mt-1.5 text-base leading-relaxed text-slate-100">{inv.root_cause}</p>
+          {narrative && <p className="mt-2 text-sm leading-relaxed text-slate-300">{narrative}</p>}
           {canInvestigate && inv.root_cause && inv.hypothesis_key !== "unknown" && (
             <button onClick={() => onAccept(inv.root_cause!)} className="mt-2 text-xs text-sky-400 hover:underline">
               Accept as root cause → mark identified
@@ -164,16 +168,27 @@ function InvestigationPanel({ inv, canInvestigate, running, onRun, onAccept }: {
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Relevant documentation</div>
           {docs.length === 0 ? <p className="text-sm text-slate-500">No matching documents.</p> : (
-            <ul className="space-y-1.5">
+            <ul className="space-y-2.5">
               {docs.map((d) => (
                 <li key={d.id}>
                   <Link href={`/knowledge/${d.document!.slug}`} className="group flex items-center gap-2 text-sm text-sky-300 hover:underline">
                     <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase text-slate-400 no-underline">{d.document!.category}</span>
                     {d.document!.title}
+                    {d.data.section != null && <span className="font-mono text-xs text-slate-400">§{String(d.data.section)}</span>}
                   </Link>
+                  {typeof d.data.heading === "string" && (
+                    <div className="mt-0.5 text-xs text-slate-500">
+                      {d.data.heading}{typeof d.data.similarity === "number" && ` · similarity ${d.data.similarity.toFixed(2)}`}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
+          )}
+          {inv.search_query && (
+            <div className="mt-3 text-[11px] text-slate-500" title="Generated from the incident and the matched log signature, then embedded for vector search">
+              Retrieved with: <span className="font-mono text-slate-400">{inv.search_query}</span>
+            </div>
           )}
         </div>
       </div>

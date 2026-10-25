@@ -43,7 +43,7 @@ def test_seeded_payment_incident_page(client, demo):
     assert detail["allowed_transitions"] == ["IDENTIFIED", "MONITORING", "RESOLVED"]
 
     inv = detail["latest_investigation"]
-    assert inv["status"] == "COMPLETED" and inv["engine"] == "rules-v1"
+    assert inv["status"] == "COMPLETED" and inv["engine"] == "rules-v1+rag/extractive-v1"
     assert inv["hypothesis_key"] == "payment_gateway_timeout"
     assert 0.7 <= inv["confidence"] <= 0.97
     assert "5000ms" in inv["root_cause"] and "stripe" in inv["root_cause"]
@@ -58,8 +58,11 @@ def test_seeded_payment_incident_page(client, demo):
     assert db_health["stance"] == "SUPPORTS" and db_health["data"]["service"] == "postgres-primary"
     similar = by_kind(inv, "SIMILAR_INCIDENT")[0]
     assert similar["related_incident"]["title"] == "Checkout payments failing — gateway timeouts"
-    docs = [e["document"]["slug"] for e in by_kind(inv, "DOCUMENT")]
-    assert docs[0] == "payment-gateway-timeout"
+    docs = by_kind(inv, "DOCUMENT")
+    assert docs[0]["document"]["slug"] == "payment-gateway-timeout"
+    assert docs[0]["data"]["section"] and docs[0]["data"]["excerpt"]  # a citable passage, not just a title
+    assert "GatewayTimeoutException" in inv["search_query"]
+    assert inv["narrative"].startswith(inv["root_cause"])
     assert not [e for e in inv["evidence"] if e["stance"] == "CONTRADICTS"]
 
 
@@ -155,8 +158,8 @@ def test_incident_telemetry_and_logs(client, demo):
 
 def test_knowledge_base_loading_is_idempotent(client, db, demo):
     users, _ = demo
-    assert load_knowledge_base(db) == {"created": 0, "updated": 0, "unchanged": 8}
-    assert db.query(KnowledgeDocument).count() == 8
+    assert load_knowledge_base(db) == {"created": 0, "updated": 0, "unchanged": 12, "reindexed": 0, "chunks": 0}
+    assert db.query(KnowledgeDocument).count() == 12
 
     docs = client.get("/api/v1/knowledge", headers=as_user(users["viewer"])).json()
     runbook = next(d for d in docs if d["slug"] == "payment-gateway-timeout")

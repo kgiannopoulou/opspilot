@@ -1,10 +1,9 @@
-import ipaddress
-
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
-from app.auth.rate_limit import LoginThrottle, get_login_throttle
+from app.auth.dependencies import get_current_user, get_rate_limiter
+from app.auth.rate_limit import LoginThrottle, RateLimiter, enforce, get_login_throttle
+from app.core.client_ip import client_ip
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models import User
@@ -14,15 +13,6 @@ from app.services.auth import AuthError, AuthService, IssuedTokens
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_COOKIE = "opspilot_refresh"
-
-
-def client_ip(request: Request) -> str | None:
-    """The peer address if it is a real IP (proxies/test clients may report a hostname)."""
-    host = request.client.host if request.client else None
-    try:
-        return str(ipaddress.ip_address(host)) if host else None
-    except ValueError:
-        return None
 
 
 def _set_refresh_cookie(response: Response, tokens: IssuedTokens) -> None:
@@ -53,9 +43,14 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
     throttle: LoginThrottle = Depends(get_login_throttle),
+    limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> TokenResponse:
     ip = client_ip(request)
     throttle_key = ip or "unknown"
+    # Two layers: the lockout stops guessing one account's password; the per-IP rate stops one client spraying a
+    # common password across many accounts (credential stuffing), which never trips a per-account lockout.
+    if limit := get_settings().login_rate_limit_per_minute:
+        enforce(limiter, f"login:{throttle_key}", limit)
     if throttle.is_locked(data.email, throttle_key):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "too many failed attempts, try again later")
     try:

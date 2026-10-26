@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import require
+from app.auth.dependencies import ai_rate_limit, require
 from app.auth.permissions import Permission
 from app.auth.rate_limit import get_redis
 from app.core.database import get_db
@@ -149,7 +149,12 @@ def list_investigations(number: str, db: DB, _: Reader) -> list[InvestigationOut
     return [InvestigationOut.model_validate(i) for i in InvestigationService(db).history(incident)]
 
 
-@router.post("/{number}/investigations", response_model=InvestigationOut, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{number}/investigations",
+    response_model=InvestigationOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(ai_rate_limit)],
+)
 def run_investigation(
     number: str,
     db: DB,
@@ -200,6 +205,7 @@ def withdraw_feedback(number: str, investigation_id: int, db: DB, user: Rater) -
     "/{number}/investigations/{investigation_id}/queries/{query_id}/run",
     response_model=QueryRunOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(ai_rate_limit)],
 )
 def run_query(
     number: str, investigation_id: int, query_id: int, data: RunQuery, db: DB, user: Investigator

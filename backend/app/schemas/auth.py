@@ -1,10 +1,24 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, EmailStr, Field
 
 from app.auth.permissions import permissions_for
+from app.core.security import BCRYPT_MAX_BYTES
 from app.models import User
 from app.schemas.common import ORMModel
+
+
+def _password_policy(value: str) -> str:
+    if len(value.encode()) > BCRYPT_MAX_BYTES:
+        raise ValueError(f"must be at most {BCRYPT_MAX_BYTES} bytes")
+    if len(set(value)) < 4:
+        raise ValueError("must not be a repeated character or a trivial pattern")
+    return value
+
+
+# Length over composition rules (NIST SP 800-63B): 12+ characters, any characters, within bcrypt's 72-byte input.
+NewPassword = Annotated[str, Field(min_length=12, max_length=72), AfterValidator(_password_policy)]
 
 
 class LoginRequest(BaseModel):
@@ -65,11 +79,11 @@ class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=2, max_length=120)
     role: str
-    password: str = Field(min_length=12, max_length=200)
+    password: NewPassword
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     role: str | None = None
     is_active: bool | None = None
-    password: str | None = Field(default=None, min_length=12, max_length=200)
+    password: NewPassword | None = None

@@ -13,6 +13,9 @@ from app.core.config import get_settings
 
 ALGORITHM = "HS256"
 BCRYPT_ROUNDS = 12
+# bcrypt only uses the first 72 bytes of a password, and bcrypt>=5 raises instead of silently truncating. New
+# passwords are validated against this limit (schemas/auth.py); a longer one at sign-in can never match.
+BCRYPT_MAX_BYTES = 72
 
 # Compared against when the user does not exist, so login timing does not reveal which e-mails are registered.
 _DUMMY_HASH = bcrypt.hashpw(b"timing-equaliser", bcrypt.gensalt(BCRYPT_ROUNDS)).decode()
@@ -28,8 +31,11 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, password_hash: str | None) -> bool:
     candidate = password_hash or _DUMMY_HASH
-    matches = bcrypt.checkpw(password.encode(), candidate.encode())
-    return matches and password_hash is not None
+    secret = password.encode()
+    too_long = len(secret) > BCRYPT_MAX_BYTES
+    # Always run one bcrypt comparison, so neither unknown e-mails nor over-long input answer faster.
+    matches = bcrypt.checkpw(secret[:BCRYPT_MAX_BYTES], candidate.encode())
+    return matches and password_hash is not None and not too_long
 
 
 def create_access_token(user_id: int, role: str, now: datetime | None = None) -> tuple[str, int]:

@@ -28,6 +28,8 @@ from prometheus_client.registry import Collector
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.redaction import RedactingFilter, redact
+
 log = logging.getLogger("opspilot.http")
 request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
@@ -208,7 +210,7 @@ class JsonFormatter(logging.Formatter):
         }
         entry.update({k: v for k, v in vars(record).items() if k not in _STANDARD})
         if record.exc_info:
-            entry["exception"] = self.formatException(record.exc_info)
+            entry["exception"] = redact(self.formatException(record.exc_info))
         return json.dumps(entry, default=str)
 
 
@@ -217,7 +219,7 @@ class TextFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         extras = " ".join(f"{k}={v}" for k, v in vars(record).items() if k not in _STANDARD)
-        line = super().format(record)
+        line = redact(super().format(record))  # the message is already redacted; this covers tracebacks
         return f"{line} request_id={request_id_var.get()} {extras}".rstrip()
 
 
@@ -229,6 +231,7 @@ def configure_logging(fmt: str, level: str = "INFO") -> None:
         formatter = TextFormatter("%(asctime)s %(levelname)s %(name)s %(message)s")
     formatter.converter = time.gmtime
     handler.setFormatter(formatter)
+    handler.addFilter(RedactingFilter())  # credentials and e-mail addresses never reach the log pipeline
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)

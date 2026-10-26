@@ -2,10 +2,15 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import InterfaceError, OperationalError
 
 log = logging.getLogger(__name__)
+
+# Fields whose submitted value is never echoed back in a 422 (FastAPI includes the rejected "input" by default).
+SENSITIVE_FIELDS = {"password", "token", "refresh_token", "secret", "authorization"}
 
 
 class DomainError(Exception):
@@ -36,6 +41,16 @@ class ValidationFailed(DomainError):
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(RequestValidationError)
+    def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+        errors = []
+        for error in exc.errors():
+            error = dict(error)
+            if SENSITIVE_FIELDS & {str(part).lower() for part in error.get("loc", ())}:
+                error.pop("input", None)
+            errors.append(error)
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
+
     @app.exception_handler(DomainError)
     def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:
         content = {"error": exc.code, "detail": exc.message, **exc.extra}

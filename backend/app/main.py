@@ -18,6 +18,7 @@ from app.auth.rate_limit import get_redis
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import register_error_handlers
+from app.core.http_security import apply_http_security
 from app.core.observability import configure_logging, metrics_response, observe_request, register_state_collector
 
 settings = get_settings()
@@ -34,14 +35,20 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
 
 
 @app.middleware("http")
 async def observability(request: Request, call_next: Any) -> Response:
     return await observe_request(request, call_next, settings.api_prefix)
+
+
+@app.middleware("http")
+async def http_security(request: Request, call_next: Any) -> Response:
+    # Registered last = outermost: security headers are added to every response, including errors and 413s.
+    return await apply_http_security(request, call_next, settings.max_body_bytes, hsts=settings.cookie_secure)
 
 
 register_error_handlers(app)

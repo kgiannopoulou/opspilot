@@ -17,6 +17,9 @@ x-backend: &backend
     OPSPILOT_DATABASE_URL: postgresql+psycopg://opspilot:${POSTGRES_PASSWORD:-opspilot}@postgres:5432/opspilot
     OPSPILOT_REDIS_URL: redis://redis:6379/0
     OPSPILOT_LOG_FORMAT: json
+    # Only the Next.js proxy (fixed address below) may tell the API who the client is (X-Forwarded-For); a request
+    # sent straight to :8010 arrives from the Docker gateway and its header is ignored (docs/security.md).
+    OPSPILOT_TRUSTED_PROXIES: '["172.30.0.10/32"]'
   # Hardening: immutable root filesystem, no Linux capabilities, no privilege escalation (setuid binaries).
   read_only: true
   tmpfs: ["/tmp"]
@@ -93,6 +96,9 @@ services:
       context: frontend
       dockerfile: ../infrastructure/docker/frontend.Dockerfile
     image: opspilot-web:local
+    networks:
+      default:
+        ipv4_address: 172.30.0.10
     ports:
       - "3010:3000"
     read_only: true
@@ -139,6 +145,12 @@ services:
       - "3011:3000"
     depends_on:
       - prometheus
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   postgres-data:

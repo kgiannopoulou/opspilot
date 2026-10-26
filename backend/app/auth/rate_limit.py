@@ -1,10 +1,12 @@
-"""Failed-login throttling in Redis: N failures per (e-mail, client IP) within a window lock that pair out."""
+"""Abuse controls in Redis: failed-login throttling per (e-mail, client IP) and fixed-window request rate limits."""
 
 import contextlib
 import logging
+import time
 from functools import lru_cache
 
 import redis
+from fastapi import HTTPException, status
 from redis.backoff import NoBackoff
 from redis.retry import Retry
 
@@ -62,3 +64,40 @@ class LoginThrottle:
 
 def get_login_throttle() -> LoginThrottle:
     return LoginThrottle()
+
+
+class RateLimiter:
+    """Fixed-window request counters in Redis: at most `limit` hits per `window` seconds per key.
+
+    Fixed windows allow a burst of up to 2 × limit across a window boundary; for abuse protection (not billing) that is
+    an accepted trade for one INCR per request. Like the login throttle it fails open: Redis down means no limits,
+    never an outage.
+    """
+
+    def __init__(self, client: redis.Redis | None = None) -> None:
+        self.client = client or get_redis()
+
+    def hit(self, key: str, limit: int, window: int, now: float | None = None) -> tuple[bool, int, int]:
+        """Count one request. Returns (allowed, remaining, seconds until the window resets)."""
+        now = time.time() if now is None else now
+        bucket = int(now // window)
+        reset_in = max(1, int((bucket + 1) * window - now))
+        try:
+            pipe = self.client.pipeline()
+            pipe.incr(f"rate:{key}:{bucket}")
+            pipe.expire(f"rate:{key}:{bucket}", window + 1, nx=True)
+            count = int(pipe.execute()[0])
+        except redis.RedisError:
+            log.warning("rate limiter unavailable (redis error); allowing request")
+            return True, limit, reset_in
+        return count <= limit, max(0, limit - count), reset_in
+
+
+def enforce(limiter: RateLimiter, key: str, limit: int, window: int = 60) -> None:
+    allowed, remaining, reset_in = limiter.hit(key, limit, window)
+    if not allowed:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "rate limit exceeded, slow down",
+            headers={"Retry-After": str(reset_in), "X-RateLimit-Limit": str(limit), "X-RateLimit-Remaining": "0"},
+        )

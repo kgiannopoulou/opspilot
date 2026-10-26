@@ -143,7 +143,7 @@ def test_token_type_is_checked():
 def test_production_requires_a_real_secret():
     with pytest.raises(ValueError, match="JWT_SECRET"):
         Settings(environment="production")
-    assert Settings(environment="production", jwt_secret="x" * 40).environment == "production"
+    assert Settings(environment="production", jwt_secret="x" * 40, cookie_secure=True).environment == "production"
 
 
 # --- role-based access control --------------------------------------------------------------------------------

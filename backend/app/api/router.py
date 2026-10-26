@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api import ai, audit, auth, catalog, dashboard, incidents, jobs, knowledge, sql, tickets, users
+from app.auth.dependencies import api_rate_limit
 
-api_router = APIRouter()
+api_router = APIRouter(dependencies=[Depends(api_rate_limit)])
 api_router.include_router(auth.router)
 api_router.include_router(tickets.router)
 api_router.include_router(catalog.router)

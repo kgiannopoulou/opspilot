@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.retrieval import KnowledgeRetriever
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import ai_rate_limit, get_current_user
 from app.core.database import get_db
 from app.models import KnowledgeDocument, User
 from app.schemas.knowledge import DocumentOut, DocumentSummary, SearchHit, SearchResults
@@ -23,7 +23,7 @@ def list_documents(db: DB, _: Authenticated) -> list[DocumentSummary]:
     return [DocumentSummary.model_validate(d) for d in docs]
 
 
-@router.get("/search", response_model=SearchResults)
+@router.get("/search", response_model=SearchResults, dependencies=[Depends(ai_rate_limit)])
 def search_knowledge(
     db: DB,
     _: Authenticated,

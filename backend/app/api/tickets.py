@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Response
 from sqlalchemy.orm import Session
 
 from app.ai.correlation import LogCorrelator
-from app.auth.dependencies import require
+from app.auth.dependencies import ai_rate_limit, require
 from app.auth.permissions import Permission
 from app.auth.rate_limit import get_redis
 from app.core.database import get_db
@@ -137,7 +137,12 @@ def get_classification(number: str, db: DB, _: Reader) -> ClassificationOut | No
     return ClassificationOut.model_validate(latest) if latest else None
 
 
-@router.post("/{number}/classification", response_model=ClassificationOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{number}/classification",
+    response_model=ClassificationOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(ai_rate_limit)],
+)
 def classify_ticket(number: str, db: DB, user: Writer) -> ClassificationOut:
     """Ask for a fresh AI suggestion (supersedes one that is still pending)."""
     return ClassificationOut.model_validate(ClassificationService(db).classify(TicketService(db).get(number), user))

@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_lockout_minutes: int = 15
 
+    # Abuse controls (docs/security.md). 0 disables a limit.
+    rate_limit_per_minute: int = 600  # every API call, per client IP
+    login_rate_limit_per_minute: int = 20  # sign-in attempts per client IP, across all e-mails (credential stuffing)
+    ai_rate_limit_per_minute: int = 20  # LLM-backed / expensive calls, per user
+    max_body_bytes: int = 1_048_576
+    # Proxies whose X-Forwarded-For is believed (CIDRs). Empty: the TCP peer is the client.
+    trusted_proxies: list[str] = []
+
     # AI. Everything works with the defaults: deterministic embeddings and an extractive writer, no API keys needed.
     embedding_provider: str = "hashing"  # "hashing" | "fastembed"
     llm_provider: str = "none"  # "none" | "anthropic" (reads ANTHROPIC_API_KEY)
@@ -43,11 +51,15 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 60.0
 
     @model_validator(mode="after")
-    def _require_real_secret_outside_dev(self) -> "Settings":
+    def _refuse_insecure_configuration(self) -> "Settings":
         if self.environment not in {"development", "test"} and (
             self.jwt_secret == DEV_JWT_SECRET or len(self.jwt_secret) < 32
         ):
             raise ValueError("OPSPILOT_JWT_SECRET must be set to a random value of at least 32 characters")
+        if "*" in self.cors_origins:
+            raise ValueError("OPSPILOT_CORS_ORIGINS cannot contain '*': the API sends credentials (refresh cookie)")
+        if self.environment == "production" and not self.cookie_secure:
+            raise ValueError("OPSPILOT_COOKIE_SECURE must be true in production (the refresh cookie needs HTTPS)")
         return self
 
 

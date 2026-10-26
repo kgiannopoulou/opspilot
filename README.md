@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (19 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (20 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -187,6 +187,7 @@ The main dashboard answers "what is on fire right now?" at a glance:
 |---|---|---|
 | `GET` | `/api/v1/dashboard/summary` | Everything the dashboard renders in one round trip — aggregated in SQL (`FILTER`, `date_bin`, `percentile_cont`) and cached in Redis for 15 s because every open dashboard polls it |
 | `GET` | `/api/v1/incidents?state=active\|resolved\|all&severity=&page=` | Incident list, active first |
+| `POST` | `/api/v1/incidents` | Declare an incident (`incidents:investigate`; you become commander, tickets linked atomically) |
 
 The cache fails open: if Redis is unavailable the summary is computed directly. The access token is kept in memory
 only (never `localStorage`); a page reload restores the session through the `HttpOnly` refresh cookie, and the
@@ -578,11 +579,33 @@ no number below is typed by hand:
 cd backend && python -m app.eval.run --note "what changed"   # rebuilds docs/evaluation from a fresh database
 ```
 
+## Testing
+
+| Layer | What | Count | Where |
+|---|---|---:|---|
+| Backend unit | Pure logic — scoring, chunking, embeddings, SQL validator, grounding, workflow rules, audit sentences | 57 | `pytest -m unit` (no services, < 1 s) |
+| Backend integration | Real PostgreSQL + Redis built from the migrations: repositories, services, transactions, constraints, triggers, workers | 153 | `pytest -m integration` |
+| API | Every router through `TestClient`, including validation errors and conflicts | ⤷ | `tests/test_*.py` |
+| Authentication | Login, throttling, refresh rotation and reuse detection, logout, deactivated users | ⤷ | `test_auth.py` |
+| **RBAC matrix** | Every route × every role, derived from the app's dependency tree — a new endpoint without a check fails the build | 50 | `test_rbac_matrix.py` |
+| RAG / AI | Retrieval, grounding, classifier, correlation, query safety (incl. "validator bypassed"), **benchmark regression gate** | ⤷ | `test_rag.py`, `test_evaluation.py` |
+| Database | ORM ↔ migration drift, constraints, append-only audit triggers, hash chain tamper detection | ⤷ | `test_database.py`, `test_audit.py` |
+| Frontend unit + component | Formatting, API client token refresh/retry, activity timeline, feedback widget | 12 | Vitest + Testing Library (`npm test`) |
+| **End-to-end** | Login → declare incident → AI investigation runs in the worker → review evidence → 👍 → resolve → audit trail shows it; viewer cannot act | 2 | Playwright against `docker compose` |
+
+Backend total: **210 tests, 94 % line coverage** (`pytest --cov`; CI fails under 90 %). The E2E test drives the real
+stack — Next.js proxy, FastAPI, Redis Streams, the worker and PostgreSQL — not mocks:
+
+```bash
+docker compose up -d --build
+cd frontend && npx playwright install chromium && npx playwright test
+```
+
 ## Repository structure
 
 ```
 opspilot/
-├── frontend/            Next.js analyst UI (app/, components/, hooks/, services/, tests/)
+├── frontend/            Next.js analyst UI (app/, components/, hooks/, services/, tests/{unit,components,e2e})
 ├── backend/
 │   ├── app/
 │   │   ├── api/         FastAPI routers
@@ -600,7 +623,7 @@ opspilot/
 ├── knowledge-base/      runbooks/, troubleshooting/, architecture/, process/
 ├── infrastructure/      docker/ (Dockerfiles), terraform/ (planned)
 ├── docs/                architecture/, decisions/, evaluation/, screenshots/
-├── .github/workflows/   CI: backend lint + tests, frontend typecheck + build, Docker build
+├── .github/workflows/   CI: lint, unit + integration tests with coverage, frontend tests + build, Docker, E2E
 ├── docker-compose.yml
 ├── .env.example
 ├── CONTRIBUTING.md
@@ -643,6 +666,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 17 | Audit trail: activity timeline, tamper-evident hash chain, admin audit log | ✅ |
 | 18 | AI feedback: 👍/👎 with reasons, AI quality report | ✅ |
 | 19 | RAG and AI evaluation: labelled benchmark, generated report, CI regression gate | ✅ |
+| 20 | Testing: unit/integration split, RBAC matrix, coverage gate, Vitest, Playwright E2E | ✅ |
 
 ## License
 

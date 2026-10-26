@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Card, ErrorBox, Pager, SeverityBadge, Spinner, StatusBadge, formatDuration, utcDateTime } from "@/components/ui";
+import { DeclareIncident } from "@/components/DeclareIncident";
 import { useApi } from "@/hooks/useApi";
+import { useAuth } from "@/hooks/useAuth";
 import { query, type IncidentSummary, type Page } from "@/services/api";
 
 const STATES = [["active", "Active"], ["resolved", "Resolved"], ["all", "All"]] as const;
@@ -11,6 +13,8 @@ const STATES = [["active", "Active"], ["resolved", "Resolved"], ["all", "All"]] 
 export default function IncidentsPage() {
   const [state, setState] = useState<"active" | "resolved" | "all">("active");
   const [page, setPage] = useState(1);
+  const [declaring, setDeclaring] = useState(false);
+  const { can } = useAuth();
   const { data, error, loading } = useApi<Page<IncidentSummary>>(
     `/incidents${query({ state, page, page_size: 20 })}`, { pollMs: 30_000 },
   );
@@ -19,6 +23,12 @@ export default function IncidentsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Incidents</h1>
+        <div className="flex items-center gap-3">
+        {can("incidents:investigate") && !declaring && (
+          <button onClick={() => setDeclaring(true)} className="rounded-md bg-sky-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-sky-400">
+            Declare incident
+          </button>
+        )}
         <div className="flex rounded-lg border border-slate-800 p-0.5 text-sm">
           {STATES.map(([value, label]) => (
             <button key={value} onClick={() => { setState(value); setPage(1); }}
@@ -27,7 +37,9 @@ export default function IncidentsPage() {
             </button>
           ))}
         </div>
+        </div>
       </div>
+      {declaring && <DeclareIncident onCancel={() => setDeclaring(false)} />}
       {error && <ErrorBox message={error} />}
       <Card>
         {loading && !data ? <Spinner /> : (

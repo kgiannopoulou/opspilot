@@ -1,0 +1,13 @@
+# Build context: repository root (backend.Dockerfile copies backend/, simulator/, knowledge-base/)
+.git
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+frontend
+docs
+simulator/output
+.env
+backend/.env
+**/*.pyc

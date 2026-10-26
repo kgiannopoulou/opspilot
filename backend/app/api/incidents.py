@@ -10,6 +10,7 @@ from app.auth.dependencies import require
 from app.auth.permissions import Permission
 from app.auth.rate_limit import get_redis
 from app.core.database import get_db
+from app.core.errors import ValidationFailed
 from app.models import Incident, User
 from app.models.enums import IncidentStatus, Severity
 from app.repositories.dashboard import DashboardRepository
@@ -19,6 +20,7 @@ from app.schemas.common import Page
 from app.schemas.correlation import LinkTicket
 from app.schemas.feedback import FeedbackIn, FeedbackOut, FeedbackSummary
 from app.schemas.incident import (
+    IncidentCreate,
     IncidentDetail,
     IncidentStatusChange,
     IncidentSummary,
@@ -79,6 +81,22 @@ def list_incidents(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post("", response_model=IncidentDetail, status_code=status.HTTP_201_CREATED)
+def declare_incident(data: IncidentCreate, db: DB, user: Investigator) -> IncidentDetail:
+    """Declare an incident (you become its commander), optionally linking the customer tickets that reported it."""
+    now = datetime.now(UTC)
+    started = data.started_at or now
+    if started > now + timedelta(minutes=1):
+        raise ValidationFailed("started_at cannot be in the future")
+    incident = IncidentService(db).declare(
+        title=data.title.strip(), severity=data.severity, primary_service=data.primary_service,
+        affected_services=data.affected_services, started_at=started, actor=user, commander=user,
+        summary=data.summary.strip(), ticket_numbers=data.ticket_numbers,
+    )  # fmt: skip
+    db.refresh(incident)
+    return to_detail(db, incident)
 
 
 def to_detail(db: Session, incident: Incident) -> IncidentDetail:

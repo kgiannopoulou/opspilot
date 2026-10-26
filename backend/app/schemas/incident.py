@@ -120,6 +120,16 @@ class IncidentDetail(IncidentSummary):
     latest_investigation: InvestigationOut | None = None
 
 
+class IncidentCreate(BaseModel):
+    title: str = Field(min_length=3, max_length=200)
+    severity: Severity
+    primary_service: str = Field(max_length=64, description="Where customers feel it, e.g. payment-service")
+    affected_services: list[str] = Field(default_factory=list, max_length=10)
+    started_at: datetime | None = Field(default=None, description="Onset; defaults to now. Not in the future.")
+    summary: str = Field(default="", max_length=5_000)
+    ticket_numbers: list[str] = Field(default_factory=list, max_length=50)
+
+
 class IncidentStatusChange(BaseModel):
     status: IncidentStatus
     root_cause: str | None = Field(default=None, max_length=5_000, description="Required to resolve")

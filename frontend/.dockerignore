@@ -1,0 +1,9 @@
+# Build context: frontend/ (frontend.Dockerfile installs dependencies itself)
+node_modules
+.next
+tests/e2e/.auth
+test-results
+playwright-report
+*.tsbuildinfo
+.env
+*.log

@@ -19,3 +19,15 @@ known-first-party = ["app", "simulator"]
 testpaths = ["tests", "../simulator/tests"]
 pythonpath = [".", ".."]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+markers = [
+    "unit: pure logic, no database or Redis (assigned automatically in conftest.py)",
+    "integration: needs PostgreSQL and/or Redis",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/scripts/*"]
+
+[tool.coverage.report]
+skip_empty = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "if __name__ == .__main__.:"]

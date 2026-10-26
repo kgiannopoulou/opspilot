@@ -39,11 +39,15 @@ npm run dev                                         # http://localhost:3010
 ## Before opening a pull request
 
 ```bash
-cd backend && ruff check . ../simulator && ruff format --check . ../simulator && pytest
-cd frontend && npm run typecheck && npm run build
+cd backend && ruff check . ../simulator && ruff format --check . ../simulator
+pytest -m unit                       # seconds, no Docker
+pytest --cov                         # everything (needs: docker compose up -d postgres redis); CI requires ≥ 90 %
+cd frontend && npm run typecheck && npm test && npm run build
+docker compose up -d --build && npx playwright test    # end-to-end, from frontend/
 ```
 
 - Keep pull requests focused on one change.
+- A new API route is picked up by `tests/test_rbac_matrix.py` automatically: it fails if the route has no
+  authentication, or if a role without the permission gets past it.
 - Schema changes need an Alembic migration (`alembic revision -m "..."`) — never edit an applied migration.
-- New endpoints need a permission check and a test for the forbidden case.
 - Use [Conventional Commit](https://www.conventionalcommits.org/) style messages where practical.

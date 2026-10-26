@@ -25,7 +25,16 @@ TEST_DATABASE_URL = os.environ.get(
 )
 TEST_REDIS_URL = os.environ.get("OPSPILOT_TEST_REDIS_URL", "redis://localhost:6381/15")
 PASSWORD = "correct-horse-battery"
+# Tests that touch PostgreSQL or Redis are integration tests; everything else is a unit test (no services needed).
+INTEGRATION_FIXTURES = {"engine", "session_factory", "db", "throttle", "worker", "client", "seeded", "demo"}
 PASSWORD_HASH = hash_password(PASSWORD)  # bcrypt is slow on purpose; hash once per test run
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """`pytest -m unit` runs in seconds without Docker; CI runs both."""
+    for item in items:
+        uses_services = INTEGRATION_FIXTURES & set(getattr(item, "fixturenames", ()))
+        item.add_marker(pytest.mark.integration if uses_services else pytest.mark.unit)
 
 
 def _ensure_database(url: str) -> None:

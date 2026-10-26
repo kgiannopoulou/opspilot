@@ -157,6 +157,9 @@ erDiagram
         varchar entity_id
         jsonb changes
         inet ip_address
+        bigint chain_seq UK
+        varchar prev_hash
+        varchar hash
     }
 ```
 
@@ -171,13 +174,14 @@ erDiagram
 | Observability | `application_logs`, `metric_samples` | Samples of platform telemetry, produced by the simulator. |
 | Knowledge | `knowledge_documents`, `document_chunks` | Runbooks and guides; chunks carry `vector(384)` embeddings for RAG. |
 | AI | `ai_investigations`, `ai_evidence` | Every conclusion is stored with the evidence rows behind it. |
-| Compliance | `audit_events` | Who did what to which entity; written in the same transaction as the change. |
+| Compliance | `audit_events` | Who did what to which entity; written in the same transaction as the change. Hash-chained and append-only (triggers, migration 0009). |
 
 ## Integrity rules enforced by the database
 
 | Rule | Mechanism |
 |---|---|
 | A ticket belongs to at most one incident | `UNIQUE (incident_tickets.ticket_id)` |
+| The audit trail cannot be rewritten | `BEFORE UPDATE/DELETE/TRUNCATE` trigger raises; `BEFORE INSERT` trigger chains `hash = sha256(prev_hash \| row)` under an advisory lock; `actor_id` is `ON DELETE RESTRICT` |
 | A service cannot depend on itself | `CHECK (service_id <> depends_on_id)` |
 | Ticket numbers / incident numbers / e-mails / service names are unique | unique constraints; numbers come from dedicated sequences (`ticket_number_seq`, `incident_number_seq`) |
 | Enumerations (priority, status, severity, log level, evidence kind…) only hold known values | `VARCHAR` + `CHECK` constraints (easier to evolve than native `ENUM` types) |

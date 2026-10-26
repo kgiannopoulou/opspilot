@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (16 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (17 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -465,6 +465,51 @@ hand-written queue instead of Celery/RQ: the semantics above fit in [`queue.py`]
 | `GET` | `/api/v1/incidents/{number}/investigations/{id}` | Poll status and per-stage progress |
 | `GET` | `/api/v1/jobs` | Queue depth, outcomes by status, recent jobs (admin) |
 
+## Audit trail
+
+Enterprise software has to answer *"who changed this, and when?"* — including what the AI did on its own. Every
+important action writes an `audit_events` row in the same transaction as the change, and the incident page tells the
+story of the incident and its customer tickets from those rows:
+
+```
+09:10:00  Ticket TCK-2026-00301 created by Sam Rivera
+09:10:00  AI classification started for TCK-2026-00301                       auto
+09:10:01  AI predicted PAYMENTS · P1 for TCK-2026-00301 (74% confidence)       auto
+09:11:00  Sam Rivera assigned TCK-2026-00301 to Maria Papadopoulou
+09:12:00  Maria Papadopoulou changed service on TCK-2026-00301 → payment-service
+09:12:00  Incident INC-135 declared by Maria Papadopoulou (SEV1)
+09:40:12  AI investigation started                                             auto
+09:40:12  AI investigation generated: payment_gateway_timeout (80% confidence) auto
+09:46:31  Maria Papadopoulou accepted the AI root cause from investigation #2
+09:52:03  Incident resolved by Maria Papadopoulou
+```
+
+Covered: ticket lifecycle, assignment, edits (with old → new service), comments, AI triage started / predicted /
+reviewed, incident declared / linked / status changes, investigations requested / started / generated / failed, the
+analyst accepting an AI root cause, every investigation query run or refused (with its SQL), sign-ins, failed sign-ins,
+refresh-token reuse, user management, and reads of the audit log itself (verify, export).
+
+**Tamper-evident, not just append-only by convention** ([migration 0009](backend/migrations/versions/0009_tamper_evident_audit_trail.py)):
+
+| Mechanism | What it gives |
+|---|---|
+| `BEFORE INSERT` trigger: `hash = sha256(prev_hash ‖ seq ‖ time ‖ actor ‖ action ‖ entity ‖ changes ‖ ip)` | A hash chain no code path can skip; an advisory lock makes chain order = commit order under concurrency |
+| `BEFORE UPDATE / DELETE / TRUNCATE` trigger raises | The application (or a bug, or SQL injection) cannot rewrite history |
+| `actor_id … ON DELETE RESTRICT` | People with history are deactivated, never erased |
+| `GET /audit/verify` recomputes the chain in SQL | Someone with database access who edits or deletes a row is pointed at (`modified` / `gap`); the response's head hash can be recorded elsewhere to anchor the chain |
+| Maintenance mode (`SET LOCAL opspilot.audit_maintenance`) | The one sanctioned exception — the demo seed backdates history, then re-chains; documented, and verification still passes from a clean seed |
+
+A superuser can still rebuild the entire chain; anchoring the head hash outside the database (or shipping rows to
+WORM storage) is the answer to that, and is noted in the threat model.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/incidents/{number}/activity` | Incident + linked tickets timeline (readers; no IPs or hashes) |
+| `GET` | `/api/v1/tickets/{number}/activity` | Ticket timeline, including worker/AI actions |
+| `GET` | `/api/v1/audit?entity_type=&entity_id=&actor_id=&action=&since=&until=` | Search the full trail (`audit:read`, admins) |
+| `GET` | `/api/v1/audit/verify` | Verify the hash chain |
+| `GET` | `/api/v1/audit/export.csv` | Archive the trail with hashes, in chain order |
+
 ## Repository structure
 
 ```
@@ -526,6 +571,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 14 | Automatic log & metric correlation for tickets | ✅ |
 | 15 | AI-generated investigation queries with a SQL safety layer | ✅ |
 | 16 | Redis background workers: async triage and investigations with live progress | ✅ |
+| 17 | Audit trail: activity timeline, tamper-evident hash chain, admin audit log | ✅ |
 
 ## License
 

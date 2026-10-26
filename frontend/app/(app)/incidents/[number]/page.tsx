@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { IncidentSeries } from "@/components/charts";
 import { InvestigationProgress } from "@/components/InvestigationProgress";
 import { InvestigationQueries } from "@/components/InvestigationQueries";
@@ -11,7 +12,7 @@ import {
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  post, type Evidence, type IncidentDetail, type IncidentStatus, type IncidentTelemetry, type Investigation, type LogLine,
+  post, type ActivityItem, type Evidence, type IncidentDetail, type IncidentStatus, type IncidentTelemetry, type Investigation, type LogLine,
 } from "@/services/api";
 
 const STATUS_ACTION: Record<IncidentStatus, string> = {
@@ -140,7 +141,7 @@ function EvidenceRow({ e }: { e: Evidence }) {
 
 function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRun, onAccept }: {
   incidentNumber: string; inv: Investigation | null; canInvestigate: boolean; running: boolean; onRun: () => void;
-  onAccept: (rootCause: string) => void;
+  onAccept: (rootCause: string, investigationId: number) => void;
 }) {
   const runButton = canInvestigate && (
     <button onClick={onRun} disabled={running}
@@ -184,7 +185,7 @@ function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRu
           {inv.narrative && <p className="mt-2 text-sm leading-relaxed text-slate-300"><CitedText text={inv.narrative} /></p>}
           <GroundingBadge g={inv.grounding} />
           {canInvestigate && inv.root_cause && inv.hypothesis_key !== "unknown" && (
-            <button onClick={() => onAccept(inv.root_cause!)} className="mt-2 text-xs text-sky-400 hover:underline">
+            <button onClick={() => onAccept(inv.root_cause!, inv.id)} className="mt-2 text-xs text-sky-400 hover:underline">
               Accept as root cause → mark identified
             </button>
           )}
@@ -272,6 +273,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
   const incident = useApi<IncidentDetail>(`/incidents/${number}`, { pollMs: 30_000 });
   const telemetry = useApi<IncidentTelemetry>(`/incidents/${number}/telemetry`, { pollMs: 60_000 });
   const logs = useApi<LogLine[]>(`/incidents/${number}/logs?limit=25`, { pollMs: 30_000 });
+  const activity = useApi<ActivityItem[]>(`/incidents/${number}/activity`, { pollMs: 15_000 });
   const [running, setRunning] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [rootCause, setRootCause] = useState("");
@@ -283,7 +285,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
   const live = useApi<Investigation>(activeId ? `/incidents/${number}/investigations/${activeId}` : null, { pollMs: 1_000 });
   const liveStatus = live.data?.id === activeId ? live.data?.status : undefined;
   useEffect(() => {
-    if (liveStatus === "COMPLETED" || liveStatus === "FAILED") void incident.reload();
+    if (liveStatus === "COMPLETED" || liveStatus === "FAILED") { void incident.reload(); void activity.reload(); }
   }, [liveStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function act(fn: () => Promise<unknown>) {
@@ -294,8 +296,11 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
     setRunning(true);
     try { await post(`/incidents/${number}/investigations`); } finally { setRunning(false); }
   });
-  const changeStatus = (status: IncidentStatus, root_cause?: string) =>
-    act(() => post(`/incidents/${number}/status`, { status, root_cause }));
+  const changeStatus = (status: IncidentStatus, root_cause?: string, accepted_investigation_id?: number) =>
+    act(async () => {
+      await post(`/incidents/${number}/status`, { status, root_cause, accepted_investigation_id });
+      await activity.reload();
+    });
 
   if (incident.loading && !incident.data) return <Spinner />;
   if (incident.error && !incident.data) return <ErrorBox message={incident.error} />;
@@ -365,7 +370,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-5">
           <InvestigationPanel incidentNumber={i.number} inv={inv} canInvestigate={canInvestigate} running={running} onRun={runInvestigation}
-            onAccept={(rc) => changeStatus("IDENTIFIED", rc)} />
+            onAccept={(rc, id) => changeStatus("IDENTIFIED", rc, id)} />
 
           <Card title="Telemetry · affected services">
             {telemetry.loading && !telemetry.data ? <Spinner /> : charts.length === 0 ? (
@@ -399,6 +404,9 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
                 ))}
               </ul>
             )}
+          </Card>
+          <Card title="Activity · audit trail">
+            {activity.loading && !activity.data ? <Spinner /> : <ActivityTimeline items={activity.data ?? []} />}
           </Card>
           <Card title="Recent errors & warnings">
             {logs.loading && !logs.data ? <Spinner /> : !logs.data?.length ? <p className="text-sm text-slate-500">No problem logs.</p> : (

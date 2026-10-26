@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import AIInvestigation, BackgroundJob, Ticket
 from app.models.enums import JobStatus
+from app.services import audit
 from app.services.classification import ClassificationService
 from app.services.investigations import InvestigationService
 from app.workers.queue import JobQueue
@@ -34,6 +35,8 @@ def triage_ticket(db: Session, job: BackgroundJob, final_attempt: bool) -> None:
     ticket = db.get(Ticket, job.payload["ticket_id"])
     if ticket is None:
         return  # deleted meanwhile: nothing to do
+    audit.record(db, None, "ticket.ai_triage_started", "ticket", ticket.number, {"job_id": str(job.id)})
+    db.commit()
     ClassificationService(db).classify(ticket)
 
 

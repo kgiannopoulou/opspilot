@@ -13,6 +13,7 @@ const NAV = [
   { href: "/knowledge", label: "Knowledge", icon: "❏" },
   { href: null, label: "Analytics", icon: "◔" },
   { href: "/admin", label: "Admin", icon: "⚙", permission: "users:manage" },
+  { href: "/audit", label: "Audit log", icon: "⛬", permission: "audit:read" },
 ] as const;
 
 const ROLE_LABEL: Record<string, string> = {

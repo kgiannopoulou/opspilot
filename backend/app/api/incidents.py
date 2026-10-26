@@ -14,6 +14,7 @@ from app.models import Incident, User
 from app.models.enums import IncidentStatus, Severity
 from app.repositories.dashboard import DashboardRepository
 from app.repositories.evidence import EvidenceRepository
+from app.schemas.audit import ActivityItem
 from app.schemas.common import Page
 from app.schemas.correlation import LinkTicket
 from app.schemas.incident import (
@@ -28,6 +29,7 @@ from app.schemas.incident import (
     MetricSeries,
 )
 from app.schemas.queries import QueryRunOut, RunQuery
+from app.services.audit import AuditService
 from app.services.incidents import IncidentService, allowed_incident_transitions
 from app.services.investigations import InvestigationService
 from app.services.queries import QueryService
@@ -98,7 +100,8 @@ def get_incident(number: str, db: DB, _: Reader) -> IncidentDetail:
 
 @router.post("/{number}/status", response_model=IncidentDetail)
 def change_incident_status(number: str, data: IncidentStatusChange, db: DB, user: Investigator) -> IncidentDetail:
-    incident = IncidentService(db).change_status(number, data.status, user, data.root_cause)
+    incident = IncidentService(db).change_status(number, data.status, user, data.root_cause,
+                                                  data.accepted_investigation_id)  # fmt: skip
     return to_detail(db, incident)
 
 
@@ -110,6 +113,13 @@ def link_ticket(number: str, data: LinkTicket, db: DB, user: Investigator) -> In
     service.link_ticket(incident, data.ticket_number, user)
     db.refresh(incident)
     return to_detail(db, incident)
+
+
+@router.get("/{number}/activity", response_model=list[ActivityItem])
+def incident_activity(number: str, db: DB, _: Reader) -> list[ActivityItem]:
+    """Audit trail of the incident and its linked tickets, oldest first: who did what, and what the AI did."""
+    incident = IncidentService(db).get(number)
+    return [ActivityItem.build(e) for e in AuditService(db).incident_activity(incident)]
 
 
 @router.get("/{number}/investigations", response_model=list[InvestigationOut])

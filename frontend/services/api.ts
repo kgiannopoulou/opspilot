@@ -154,6 +154,19 @@ export interface JobsOverview {
   by_status: Record<string, number>; recent: BackgroundJob[];
 }
 
+export interface ActivityItem {
+  id: number; occurred_at: string; action: string; entity_type: string; entity_id: string; actor: UserRef | null;
+  description: string;
+}
+export interface AuditEvent extends ActivityItem {
+  changes: Record<string, unknown>; ip_address: string | null; chain_seq: number | null; prev_hash: string | null;
+  hash: string | null;
+}
+export interface ChainVerification {
+  valid: boolean; rows: number; head_seq: number | null; head_hash: string | null;
+  breaks: { chain_seq: number; audit_id: number; reason: string }[]; verified_at: string;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -218,6 +231,15 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
   }
   if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
   return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+/** Save an authenticated GET response as a file (the bearer token cannot ride on a plain link). */
+export async function download(path: string, filename: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  const url = URL.createObjectURL(await res.blob());
+  Object.assign(document.createElement("a"), { href: url, download: filename }).click();
+  URL.revokeObjectURL(url);
 }
 
 export const post = <T>(path: string, body?: unknown) =>

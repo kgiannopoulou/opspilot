@@ -123,6 +123,9 @@ class IncidentDetail(IncidentSummary):
 class IncidentStatusChange(BaseModel):
     status: IncidentStatus
     root_cause: str | None = Field(default=None, max_length=5_000, description="Required to resolve")
+    accepted_investigation_id: int | None = Field(
+        default=None, description="Set when the root cause is the AI finding of this investigation (audited)"
+    )
 
 
 class MetricPoint(BaseModel):

@@ -1,23 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
-import pytest
 from sqlalchemy import select
 
 from app.ai.engine import Evidence, score
-from app.models import AuditEvent, Incident, KnowledgeDocument, User
+from app.models import AuditEvent, KnowledgeDocument
 from app.models.enums import EvidenceKind, EvidenceStance, Severity
-from app.scripts.seed import seed
 from app.services.incidents import IncidentService
 from app.services.knowledge import load_knowledge_base
 from tests.conftest import as_user
-
-
-@pytest.fixture
-def demo(db):
-    seed(db, now=datetime.now(UTC))
-    users = {u.email.split("@")[0]: u for u in db.query(User)}
-    incidents = {i.title: i.number for i in db.scalars(select(Incident)).unique()}
-    return users, incidents
 
 
 def by_kind(investigation: dict, kind: str) -> list[dict]:

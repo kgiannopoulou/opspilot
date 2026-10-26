@@ -4,8 +4,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationFailed
-from app.models import Incident, IncidentTicket, Service, TicketEvent, User
-from app.models.enums import IncidentStatus, Severity, TicketEventType
+from app.models import AIInvestigation, Incident, IncidentTicket, Service, TicketEvent, User
+from app.models.enums import IncidentStatus, InvestigationStatus, Severity, TicketEventType
 from app.repositories.tickets import TicketRepository
 from app.services import audit
 
@@ -33,7 +33,12 @@ class IncidentService:
         return incident
 
     def change_status(
-        self, number: str, status: IncidentStatus, actor: User, root_cause: str | None = None
+        self,
+        number: str,
+        status: IncidentStatus,
+        actor: User,
+        root_cause: str | None = None,
+        accepted_investigation_id: int | None = None,
     ) -> Incident:
         """Move an incident through its lifecycle. Resolving requires a root cause (given now or recorded earlier)."""
         incident = self.db.scalar(select(Incident).where(Incident.number == number).with_for_update(of=Incident))
@@ -45,6 +50,13 @@ class IncidentService:
             incident.root_cause = root_cause.strip()
         if status == IncidentStatus.RESOLVED and not incident.root_cause:
             raise ValidationFailed("a root cause is required to resolve an incident")
+        if accepted_investigation_id is not None:
+            run = self.db.get(AIInvestigation, accepted_investigation_id)
+            if run is None or run.incident_id != incident.id or run.status != InvestigationStatus.COMPLETED:
+                raise ValidationFailed(f"investigation {accepted_investigation_id} is not a completed run of {number}")
+            audit.record(self.db, actor, "incident.ai_root_cause_accepted", "incident", incident.number,
+                         {"investigation_id": run.id, "hypothesis": run.hypothesis_key,
+                          "confidence": run.confidence})  # fmt: skip
         previous = incident.status
         incident.status = status
         incident.resolved_at = datetime.now(UTC) if status == IncidentStatus.RESOLVED else None

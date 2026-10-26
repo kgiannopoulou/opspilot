@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.models import Ticket, User
 from app.models.enums import Priority, TicketStatus
 from app.repositories.tickets import TicketFilters, TicketRepository
+from app.schemas.audit import ActivityItem
 from app.schemas.classification import ClassificationMetrics, ClassificationOut, ClassificationReview
 from app.schemas.common import Page
 from app.schemas.correlation import CorrelationOut
@@ -25,6 +26,7 @@ from app.schemas.ticket import (
     TicketTransition,
     TicketUpdate,
 )
+from app.services.audit import AuditService
 from app.services.classification import ClassificationService
 from app.services.ticket_workflow import allowed_transitions
 from app.services.tickets import TicketService
@@ -147,6 +149,13 @@ def correlate_ticket(number: str, db: DB, _: Reader) -> CorrelationOut:
     suggestion = ClassificationService(db).latest(ticket)
     service = None if ticket.service else (suggestion.service.name if suggestion and suggestion.service else None)
     return CorrelationOut(**LogCorrelator(db).correlate(ticket, service).as_dict())
+
+
+@router.get("/{number}/activity", response_model=list[ActivityItem])
+def ticket_activity(number: str, db: DB, _: Reader) -> list[ActivityItem]:
+    """The ticket's audit trail (including AI actions by the worker), oldest first."""
+    ticket = TicketService(db).get(number)
+    return [ActivityItem.build(e) for e in AuditService(db).entity_activity("ticket", ticket.number)]
 
 
 @router.get("/{number}/events", response_model=list[TicketEventOut])

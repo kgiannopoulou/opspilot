@@ -2,21 +2,22 @@
 
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 import pytest
 import redis
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, make_url, text
+from sqlalchemy import create_engine, make_url, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.rate_limit import LoginThrottle, get_login_throttle, get_redis
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.models import Role, Service, User
-from app.scripts.seed import reset
+from app.models import Incident, Role, Service, User
+from app.scripts.seed import reset, seed
 from app.workers.worker import Worker
 
 TEST_DATABASE_URL = os.environ.get(
@@ -115,6 +116,15 @@ def seeded(db: Session) -> dict[str, User | Service]:
     db.add_all([*people.values(), payment, auth])
     db.commit()
     return people | {"payment": payment, "auth": auth}
+
+
+@pytest.fixture
+def demo(db: Session) -> tuple[dict[str, User], dict[str, str]]:
+    """The full demo seed: users by e-mail local part, incident numbers by title."""
+    seed(db, now=datetime.now(UTC))
+    users = {u.email.split("@")[0]: u for u in db.query(User)}
+    incidents = {i.title: i.number for i in db.scalars(select(Incident)).unique()}
+    return users, incidents
 
 
 def as_user(user: User) -> dict[str, str]:

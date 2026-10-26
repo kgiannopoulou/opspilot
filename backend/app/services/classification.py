@@ -148,8 +148,10 @@ class ClassificationService:
             ticket.priority = priority
             applied.append("priority")
         if service is not None and ticket.service_id != service.id:
+            previous = ticket.service.name if ticket.service else None
             ticket.service_id = service.id
-            self._ticket_event(ticket, actor, TicketEventType.UPDATED, data={"fields": ["service"]})
+            change = {"from": previous, "to": service.name}
+            self._ticket_event(ticket, actor, TicketEventType.UPDATED, data={"fields": ["service"], "service": change})
             applied.append("service")
         return applied
 

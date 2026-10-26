@@ -26,11 +26,12 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
-from app.models import Base, Incident, IncidentTicket, Role, Service, Ticket, TicketEvent, User
+from app.models import AuditEvent, Base, Incident, IncidentTicket, Role, Service, Ticket, TicketEvent, User
 from app.models.enums import IncidentStatus, Priority, Severity, TicketCategory, TicketSource, TicketStatus
 from app.repositories.observability import bulk_insert_app_data, bulk_insert_logs, bulk_insert_metrics
 from app.repositories.tickets import TicketRepository
 from app.schemas.ticket import CommentCreate, TicketCreate, TicketTransition
+from app.services import audit
 from app.services.classification import ClassificationService
 from app.services.incidents import IncidentService
 from app.services.investigations import InvestigationService
@@ -183,7 +184,8 @@ def reset(db: Session) -> None:
         for t in Base.metadata.sorted_tables
         if t.name not in REFERENCE_TABLES
     )
-    db.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+    with audit.maintenance(db):  # the audit trail is append-only; a full reset is the one sanctioned exception
+        db.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     db.execute(text("ALTER SEQUENCE ticket_number_seq RESTART"))
     db.execute(text("ALTER SEQUENCE incident_number_seq RESTART"))
     db.commit()
@@ -337,6 +339,7 @@ def seed_live(db: Session, now: datetime, users: dict[str, User], services: dict
             # Customers report a few minutes after onset; the ticket's timeline follows from there.
             _backdate(db, ticket, sched.start + timedelta(minutes=4 + 3 * i))
             numbers.append(ticket.number)
+        declared_at = sched.start + timedelta(minutes=6)
 
         affected = sorted({scenario.symptom_service, scenario.root_cause_service})
         incident = incidents.declare(
@@ -351,6 +354,7 @@ def seed_live(db: Session, now: datetime, users: dict[str, User], services: dict
             signature=None,  # unknown until investigated
             ticket_numbers=numbers,
         )
+        _backdate_audit(db, "incident", incident.number, declared_at)
         if live.status != IncidentStatus.INVESTIGATING:
             incident.status = live.status
             db.commit()
@@ -365,7 +369,22 @@ def _backdate(db: Session, ticket: Ticket, created: datetime) -> None:
     for n, event in enumerate(list(events)):
         event.created_at = created + timedelta(minutes=n)
     db.execute(update(Ticket).where(Ticket.id == ticket.id).values(updated_at=created + timedelta(minutes=5)))
-    db.commit()
+    _backdate_audit(db, "ticket", ticket.number, created, step=timedelta(minutes=1))
+
+
+def _backdate_audit(
+    db: Session, entity_type: str, entity_id: str, start: datetime, step: timedelta = timedelta(seconds=20)
+) -> None:
+    """Replay history: move the entity's audit rows to when the story happened. seed() re-chains at the end."""
+    with audit.maintenance(db):
+        rows = db.scalars(
+            select(AuditEvent)
+            .where(AuditEvent.entity_type == entity_type, AuditEvent.entity_id == entity_id)
+            .order_by(AuditEvent.chain_seq)
+        ).unique()
+        for n, row in enumerate(list(rows)):
+            row.occurred_at = start + n * step
+        db.commit()
 
 
 def seed(db: Session, now: datetime | None = None) -> None:
@@ -378,6 +397,9 @@ def seed(db: Session, now: datetime | None = None) -> None:
     seed_live(db, now, users, services)
     seed_backlog(db, users)
     seed_triage(db, users)
+    with audit.maintenance(db):
+        audit.rechain(db)  # backdated rows get their hashes recomputed: the chain verifies from a clean seed
+        db.commit()
 
 
 def seed_backlog(db: Session, users: dict[str, User]) -> None:

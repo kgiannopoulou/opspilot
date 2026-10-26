@@ -80,7 +80,8 @@ class TicketService:
                 to_value=changes["priority"].value,
             )
             ticket.priority = changes["priority"]
-        changed_fields = []
+        changed_fields: list[str] = []
+        details: dict[str, object] = {}
         for field in ("title", "description"):
             if changes.get(field) is not None and changes[field] != getattr(ticket, field):
                 setattr(ticket, field, changes[field].strip())
@@ -88,11 +89,12 @@ class TicketService:
         if "labels" in changes and changes["labels"] is not None:
             ticket.labels = sorted(set(changes["labels"]))
             changed_fields.append("labels")
-        if "service" in changes:
+        if "service" in changes and self._service_id(changes["service"]) != ticket.service_id:
+            details["service"] = {"from": ticket.service.name if ticket.service else None, "to": changes["service"]}
             ticket.service_id = self._service_id(changes["service"])
             changed_fields.append("service")
         if changed_fields:
-            self._event(ticket, actor, TicketEventType.UPDATED, data={"fields": changed_fields})
+            self._event(ticket, actor, TicketEventType.UPDATED, data={"fields": changed_fields, **details})
         return self._commit(ticket)
 
     def transition(self, number: str, data: TicketTransition, actor: User) -> Ticket:

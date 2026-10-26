@@ -4,791 +4,285 @@
 
 ### AI-Powered Application Support & Incident Intelligence
 
-**Tickets → Logs → Metrics → AI Investigation → Resolution**
-
-[Architecture](docs/architecture/README.md) · [Problem Statement](docs/problem-statement.md) · [API Docs](#api) · [Roadmap](#roadmap)
-
-`FastAPI` · `Next.js` · `PostgreSQL` · `Redis` · `pgvector` · `Docker` · `GitHub Actions`
+**Correlates support tickets, application logs, metrics and internal documentation to generate evidence-backed
+incident investigations.**
 
 [![CI](https://github.com/kgiannopoulou/opspilot/actions/workflows/ci.yml/badge.svg)](https://github.com/kgiannopoulou/opspilot/actions/workflows/ci.yml)
-![Backend tests](https://img.shields.io/badge/backend%20tests-241%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
-![Docker](https://img.shields.io/badge/docker%20compose-build%20%E2%9C%93-2496ED?logo=docker&logoColor=white)
+[![Security](https://github.com/kgiannopoulou/opspilot/actions/workflows/security.yml/badge.svg)](https://github.com/kgiannopoulou/opspilot/actions/workflows/security.yml)
+![Backend tests](https://img.shields.io/badge/backend%20tests-299%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
+![Docker](https://img.shields.io/badge/docker%20compose-up%20%E2%9C%93-2496ED?logo=docker&logoColor=white)
+
+[Architecture](#architecture) · [Demo](#demo) · [Engineering decisions](#engineering-decisions) ·
+[AI evaluation](#rag--ai-evaluation) · [Tests](#testing) · [Security](#security) · [Run it](#running-locally)
 
 </div>
 
----
+## Why OpsPilot?
 
-OpsPilot is an application support platform that correlates **support tickets**, **application logs** and
-**service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
-colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
+When customers report *"payment fails after pressing Confirm Order"*, an application support engineer walks the same
+path every time: ticket → logs → metrics → database → runbooks → past incidents → root cause. During an outage that
+walk takes the most time and is the easiest to get wrong.
 
-> **Status:** active development — built in public, step by step (24 steps so far, see the [roadmap](#roadmap)).
+OpsPilot automates the evidence-gathering and puts the result on one screen: a probable root cause, a confidence score,
+the evidence for *and against* it, the relevant runbook passage, a safe diagnostic query and next steps. It is not a
+chatbot. It behaves like a colleague who has already read the logs, and every conclusion it draws can be clicked
+through to the data.
 
-## The problem
+Built for a fictional SaaS company, **ShopStream**, whose five services are simulated with realistic logs, metrics and
+injectable incidents → [problem statement, personas, success metrics](docs/problem-statement.md)
 
-ShopStream, a fictional SaaS company, runs an e-commerce and payment platform. Customers report symptoms —
-*"payment fails after pressing Confirm Order"*, *"the dashboard takes 30 seconds to load"*, *"HTTP 500 on password
-reset"* — and an Application Support Engineer has to walk from the ticket to logs, database, metrics, runbooks
-and past incidents before a root cause emerges.
+## Demo
 
-OpsPilot automates that evidence-gathering path and puts the result on one screen: a probable root cause,
-a confidence score, the evidence behind it, next investigation steps and the relevant documentation.
+The 90-second walkthrough is recorded in the next step.
 
-→ Full write-up: [docs/problem-statement.md](docs/problem-statement.md)
+**Live demo:** there is no public instance: the stack includes a SQL sandbox and, optionally, an LLM API key, which
+should not sit on the open internet. `docker compose up` starts the complete system with demo data in about three
+minutes ([Running locally](#running-locally)).
+
+## Key features
+
+| | |
+|---|---|
+| ✓ **Incident management** | Declare, investigate, identify, monitor, resolve; linked customer tickets; telemetry with the onset marked → [guide](docs/features.md#incident-investigation) |
+| ✓ **Ticket workflow** | State machine, assignment, comments, timeline, idempotent creation and duplicate detection → [guide](docs/features.md#ticket-management) |
+| ✓ **AI classification** | Category / priority / service suggestions that a human accepts, modifies or rejects → [guide](docs/features.md#ai-ticket-triage-human-in-the-loop) |
+| ✓ **Log correlation** | WARN/ERROR patterns ±15 min around a ticket, against a 2-hour baseline, across dependencies → [guide](docs/features.md#automatic-log-correlation) |
+| ✓ **Metrics correlation** | Latency, error rate, DB connections and CPU against each service's own baseline |
+| ✓ **RAG knowledge retrieval** | Heading-aligned chunks in pgvector, hybrid scoring, cited by section → [guide](docs/features.md#retrieval-augmented-generation-rag) |
+| ✓ **Evidence-backed root cause** | Hypotheses scored only from evidence; a grounding check rejects uncited claims → [guide](docs/features.md#evidence-citations--grounding) |
+| ✓ **SQL investigation assistant** | Generated diagnostic queries, AST-validated and run read-only by a human → [guide](docs/features.md#investigation-queries-ai-generated-sql-safely) |
+| ✓ **RBAC** | Four roles, permissions checked on every route and proven by a route × role test matrix → [guide](docs/features.md#authentication--access-control) |
+| ✓ **Audit trail** | Every human and AI action, hash-chained, and the database refuses any edit → [guide](docs/features.md#audit-trail) |
+| ✓ **Prompt-injection defence** | Malicious documents quarantined; retrieved text isolated as data → [security](docs/security.md#prompt-injection) |
+| ✓ **Live progress** | Background workers + Server-Sent Events; degraded mode when the LLM or Redis is down → [guide](docs/features.md#background-workers-redis-streams) |
 
 ## Architecture
 
 ![OpsPilot architecture](docs/architecture/architecture.svg)
 
-A Next.js analyst UI talks to a FastAPI backend. PostgreSQL is the system of record (tickets, incidents, logs,
-metrics, audit) and will hold the `pgvector` knowledge base; Redis provides caching and rate limiting.
-The investigation engine correlates logs, metrics and past incidents into an evidence-backed root-cause report.
+A Next.js analyst UI talks to a FastAPI backend through a same-origin proxy. PostgreSQL (with pgvector) is the system
+of record for tickets, incidents, logs, metrics, embeddings and the audit trail. Redis carries the job queue, cache,
+rate limits and live-update notifications. Background workers run triage and investigations; the LLM is optional and
+sits behind a circuit breaker.
+→ [Components, layering and flows](docs/architecture/README.md) · [database design](docs/architecture/database.md)
 
-→ Components, flows and design principles: [docs/architecture](docs/architecture/README.md) ·
-decisions: [docs/decisions](docs/decisions)
-
-## ShopStream simulator
-
-OpsPilot needs real evidence to investigate, so the repository ships a deterministic simulator of the fictional
-ShopStream platform — `auth-service`, `payment-service`, `order-service`, `notification-service` and
-`postgres-primary` — that emits realistic logs and per-minute metrics and can inject incidents:
-
-```
-2026-10-22T14:31:42Z INFO  payment-service  Payment request initiated order_id=ORD-84931
-2026-10-22T14:31:42Z INFO  payment-service  Calling payment gateway provider=stripe
-2026-10-22T14:31:47Z ERROR payment-service  GatewayTimeoutException provider=stripe timeout=5000ms order_id=ORD-84931
-2026-10-22T14:31:47Z WARN  order-service  Payment failed order_id=ORD-84931 retry=1
-```
-
-| Scenario | Symptom | Metric footprint |
-|---|---|---|
-| `payment_gateway_timeout` | Checkout freezes after clicking Pay | payment p95 latency ≈ 5.3 s (+412 %), error rate 17 %, DB normal |
-| `db_pool_exhaustion` | Dashboard takes 30 s to load | DB connections 99/100, query p95 2.4 s, order-service p95 29 s |
-| `smtp_auth_failure` | HTTP 500 on password reset | notification error rate 58 %, auth-service error rate 4.5 % |
-
-→ [simulator/README.md](simulator/README.md)
-
-## Ticket management
-
-The platform is useful before any AI is involved. Tickets follow a support lifecycle enforced by a state machine
-([`ticket_workflow.py`](backend/app/services/ticket_workflow.py)):
-
-```
-OPEN ──► TRIAGED ──► INVESTIGATING ──► RESOLVED ──► CLOSED
-  │         ▲  │            ▲              │
-  │         └──┘ (back)     └── reopen ────┘
-  └──► CLOSED (duplicate / not a bug — resolution note required)
-```
-
-- Human-friendly numbers (`TCK-2026-00042`) from a Postgres sequence, priority P1–P4, affected service, labels.
-- Assignment, public and internal comments, and an append-only **event timeline** (created, status changed,
-  priority changed, assigned, commented) written in the same transaction as the change.
-- Concurrent updates to one ticket are serialised with `SELECT … FOR UPDATE`.
-- The API returns `allowed_transitions` with every ticket so the UI only offers valid actions.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/tickets?status=&priority=&service=&assignee_id=&unassigned=&q=&page=` | Filtered, paginated queue |
-| `POST` | `/api/v1/tickets` | Create a ticket (`Idempotency-Key` header supported; `409` on a duplicate, `allow_duplicate=true` overrides) |
-| `GET` / `PATCH` | `/api/v1/tickets/{number}` | Read / edit title, description, priority, service, labels |
-| `POST` | `/api/v1/tickets/{number}/transition` | Move through the lifecycle |
-| `POST` | `/api/v1/tickets/{number}/assign` | Assign / unassign |
-| `GET` / `POST` | `/api/v1/tickets/{number}/comments` | Discussion |
-| `GET` | `/api/v1/tickets/{number}/events` | Timeline |
-
-Interactive OpenAPI docs: `http://localhost:8010/docs`.
-
-## Database design
-
-18 tables in PostgreSQL 16 + `pgvector`, managed by Alembic migrations:
+## AI investigation pipeline
 
 ```mermaid
-erDiagram
-    roles ||--o{ users : has
-    users ||--o{ tickets : "reports / is assigned"
-    services ||--o{ tickets : "affected by"
-    tickets ||--o{ ticket_comments : has
-    tickets ||--o{ ticket_events : timeline
-    services ||--o{ service_dependencies : "depends on"
-    incidents ||--o{ incident_tickets : groups
-    tickets ||--o| incident_tickets : "belongs to ≤ 1"
-    incidents ||--o{ incident_services : affects
-    services ||--o{ application_logs : emits
-    services ||--o{ metric_samples : emits
-    knowledge_documents ||--o{ document_chunks : "split into (vector 384)"
-    incidents ||--o{ ai_investigations : "investigated by"
-    ai_investigations ||--o{ ai_evidence : "backed by"
-    ai_evidence }o--o| knowledge_documents : cites
-    users ||--o{ audit_events : performs
+flowchart LR
+    T[Ticket / incident] --> C[Correlate logs & metrics<br/>±15 min, vs 2 h baseline]
+    C --> E[Evidence collectors<br/>logs · metrics · dependencies<br/>changes · past incidents]
+    E --> H[Score hypotheses<br/>confidence from evidence only]
+    H --> R[Retrieve runbooks<br/>pgvector HNSW + hybrid boosts]
+    R --> W[Write cited summary<br/>Claude via JSON schema<br/>or extractive fallback]
+    W --> G{Grounding +<br/>injection checks}
+    G -- pass --> Q[Propose read-only SQL<br/>AST allowlist]
+    G -- fail --> X[Extractive write-up<br/>rejection recorded]
+    X --> Q
+    Q --> U[Engineer reviews<br/>accepts root cause · runs query · rates it]
+    U --> A[(Audit trail)]
 ```
 
-- **Integrity in the schema, not only in code:** foreign keys with deliberate `ON DELETE` rules, unique constraints
-  (one incident per ticket, one metric value per series/minute), `CHECK` constraints for every enumeration,
-  `confidence BETWEEN 0 AND 1`, no self-dependencies.
-- **Indexes for real queries:** composite queue index, partial index on WARN/ERROR logs, BRIN on log timestamps,
-  GIN on document tags, HNSW (`vector_cosine_ops`) on chunk embeddings.
-- **JSONB only where justified** — variable log attributes, event payloads, engine-owned evidence data.
-- **Transactions + audit:** each use case commits the change, its timeline event and its `audit_events` row together.
-- A test fails if ORM models and migrations drift (`alembic` autogenerate comparison).
+The evidence engine is deterministic and LLM-free (~25 ms). The model only explains evidence that is already stored,
+cannot introduce facts the grounding check would not find, and never decides the confidence
+([ADR 006](docs/decisions/006-evidence-first-investigations.md)).
 
-→ Full design notes and the complete ER diagram: [docs/architecture/database.md](docs/architecture/database.md)
+## Technology stack
 
-The demo seed (`python -m app.scripts.seed --reset`) loads 60 days of incident history, ~300 tickets, and the last
-6 hours of simulated logs/metrics with three live incidents.
-
-## Authentication & access control
-
-| Endpoint | Behaviour |
+| Layer | Technology |
 |---|---|
-| `POST /api/v1/auth/login` | bcrypt-verified credentials → 15-minute **JWT access token** (HS256, algorithm pinned, issuer checked) in the body + **refresh token** in an `HttpOnly`, `SameSite=Strict` cookie scoped to `/api/v1/auth` |
-| `POST /api/v1/auth/refresh` | **Rotates** the refresh token on every use. Presenting an already-rotated token is treated as theft: the whole token family is revoked |
-| `POST /api/v1/auth/logout` | Revokes the session's refresh-token family and clears the cookie |
-| `GET /api/v1/auth/me` | Current user, role and effective permissions |
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, hand-rolled SVG charts, Server-Sent Events client |
+| **Backend** | Python 3.12, FastAPI, Pydantic 2, SQLAlchemy 2 (typed, mypy-checked), Alembic |
+| **Data** | PostgreSQL 16 + pgvector (HNSW), Redis 7 (Streams, pub/sub, rate limits, cache) |
+| **AI** | Claude (`claude-opus-5-5`, JSON-schema structured output) — optional; deterministic hashing embeddings or `bge-small-en-v1.5` (fastembed); sqlglot for SQL validation |
+| **Infrastructure** | Docker Compose (non-root, read-only, capability-free containers), GitHub Actions, Prometheus + Grafana, Trivy, CodeQL, gitleaks, Dependabot |
+| **Testing** | pytest (unit + integration against real PostgreSQL/Redis), Vitest + Testing Library, Playwright E2E |
 
-Refresh tokens are opaque random strings stored only as SHA-256 hashes. Failed logins are throttled per
-e-mail + IP in Redis (5 failures → 15-minute lock), error messages never reveal whether an e-mail exists, and login
-timing is equalised for unknown users. Users are re-loaded on every request, so deactivating an account takes effect
-immediately rather than when its JWT expires. Logins, failures, token-reuse detection and all user management
-are written to `audit_events`.
+## Example investigation
 
-**Role-based access control** — roles live in the database, permissions per role in
-[`app/auth/permissions.py`](backend/app/auth/permissions.py), enforced with a `require(Permission.X)` dependency:
+The seeded payment incident, as OpsPilot handles it. Every number below is from the demo data.
 
-| Permission | Viewer | Support Agent | Engineer | Admin |
-|---|:-:|:-:|:-:|:-:|
-| `tickets:read`, `incidents:read`, `dashboard:read` | ✅ | ✅ | ✅ | ✅ |
-| `tickets:write` — create/update/comment/assign | | ✅ | ✅ | ✅ |
-| `incidents:investigate` — run investigations, link tickets | | | ✅ | ✅ |
-| `users:manage` — `POST/PATCH/DELETE /users` | | | | ✅ |
-| `ai:feedback` — rate AI investigations | | ✅ | ✅ | ✅ |
-| `services:manage`, `audit:read` | | | | ✅ |
+```text
+TICKET     TCK-2026-00313  "Payment screen throws timeout after login"   P2 · customer support
+           Customers on mobile log in fine, then the payment screen spins and fails with a timeout.
 
-`DELETE /api/v1/users/{id}` requires **admin**; it is a soft delete (history keeps its references) that also
-revokes every refresh token. Admins cannot delete, deactivate or demote themselves.
+TRIAGE     PAYMENTS · P1 · payment-service   (keywords-v1 — awaiting human review)
+CORRELATE  payment-service   ! anomalous  12 × GatewayTimeoutException (new)   p95 1,067 ms → 5,321 ms
+           postgres-primary  ✓ normal
+           order-service     ! anomalous  12 × Payment failed
+           → Matches active incident INC-135 — Payment checkout timeout            [Link ticket]
 
-Demo accounts (password `opspilot-demo`): `nikos@opspilot.dev` (admin), `maria@opspilot.dev` and
-`alex@opspilot.dev` (engineer), `sam@opspilot.dev` (support agent), `viewer@opspilot.dev` (viewer).
-
-## Analyst dashboard
-
-A Next.js analyst UI in the spirit of Datadog / ServiceNow / PagerDuty: sign-in, a sidebar app shell that hides what
-your role cannot use, and five working screens — **Dashboard**, **Incidents**, **Tickets** (queue + detail with
-lifecycle actions, assignment, comments and timeline), **Services** and **Admin** (user management).
-
-![OpsPilot dashboard](docs/screenshots/dashboard.jpg)
-
-The main dashboard answers "what is on fire right now?" at a glance:
-
-- **Active incidents by severity** (SEV1–SEV3), **resolved** count and **MTTR** for the last 30 days with the change
-  against the previous 30 days, open / unassigned / today's ticket counts.
-- **Active incident list** ordered by severity then age, with affected services, linked tickets and duration.
-- **Incident volume** (stacked by severity) and **ticket volume** for the last 30 days — hand-rolled SVG charts with
-  hover tooltips, no chart library.
-- **Service health** for the last 6 hours: status derived from error rate and p95 latency against the service's own
-  median baseline, an error-rate sparkline and the latency change in percent.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/dashboard/summary` | Everything the dashboard renders in one round trip — aggregated in SQL (`FILTER`, `date_bin`, `percentile_cont`) and cached in Redis for 15 s because every open dashboard polls it |
-| `GET` | `/api/v1/incidents?state=active\|resolved\|all&severity=&page=` | Incident list, active first |
-| `POST` | `/api/v1/incidents` | Declare an incident (`incidents:investigate`; you become commander, tickets linked atomically) |
-
-The cache fails open: if Redis is unavailable the summary is computed directly. The access token is kept in memory
-only (never `localStorage`); a page reload restores the session through the `HttpOnly` refresh cookie, and the
-Next.js server proxies `/api/*` so that cookie stays first-party.
-
-## Incident investigation
-
-The incident page is the showcase screen: everything an engineer needs to go from *"customers can't pay"* to a
-probable root cause, without opening five tools.
-
-![Incident investigation](docs/screenshots/incident-investigation.jpg)
-
-![Recommended steps, documentation and suggested SQL](docs/screenshots/incident-recommendations.jpg)
-
-**How the investigation engine works** ([`app/ai/engine.py`](backend/app/ai/engine.py), engine `rules-v1`):
-
-1. **Scope:** the affected services plus their direct dependencies, over a window starting at onset (capped at 60
-   minutes so a long-running incident is not polluted by later, unrelated ones). "Normal" is the 2 hours before onset.
-2. **Evidence collectors** query what is stored in PostgreSQL:
-   - *Logs:* WARN/ERROR lines grouped by service + message, compared with the baseline rate (new vs. pre-existing).
-   - *Metrics:* p90 during the incident vs. median baseline for latency, error rate, DB connections, query latency, CPU.
-   - *Dependency health:* a healthy dependency localises the fault (*"postgres-primary remains healthy"*); a sick one
-     **contradicts** the hypothesis and lowers confidence.
-   - *Change events:* config reloads, scheduled jobs and deployments in the 30 minutes before onset.
-   - *History:* resolved incidents with a matching error signature (*"Similar to INC-106, 41 days ago"*).
-   - *Knowledge base:* runbook passages found by semantic search (see [RAG](#retrieval-augmented-generation-rag)).
-3. **Hypotheses** ([`hypotheses.py`](backend/app/ai/hypotheses.py)) are proposed by log signatures and scored *only*
-   from the evidence: `confidence = (1 − Π(1 − w) over supporting) × Π(1 − w) over contradicting`, capped at 97 %.
-   The best-supported one wins. Root-cause text, steps and SQL are templates filled from real log attributes
-   (`provider=stripe`, `timeout=5000ms`), so they never state a value that is not in the data.
-4. Nothing matches? The result is an honest low-confidence *unknown* (≤ 35 %) naming the strongest new signal.
-
-Every run is stored as an immutable `ai_investigations` row with its ordered `ai_evidence` (stance, weight and the raw
-numbers in JSONB), audited, and shown in the UI with one click to see the data behind each claim. Results on the
-seeded scenarios:
-
-| Incident | Diagnosis | Confidence | Key evidence |
-|---|---|---|---|
-| Payment checkout timeout | Gateway exceeds the 5 s client timeout | ~80 % | 35 × `GatewayTimeoutException`, p95 +407 %, DB healthy, similar INC |
-| Merchant dashboard slow | DB connection pool exhaustion | ~94 % | `QueuePool limit`, DB connections 33 → 99, revenue-report job started 2 min before |
-| HTTP 500 on password reset | SMTP authentication failure | ~68 % | `SMTPAuthenticationError` (535), SMTP credentials reloaded 1 min before onset |
-
-The rest of the page: incident lifecycle actions (`INVESTIGATING → IDENTIFIED → MONITORING → RESOLVED`, resolving
-requires a root cause, *Accept as root cause* copies the AI finding), per-minute telemetry charts with the onset
-marked, linked customer tickets and a live tail of errors/warnings. The knowledge base (`knowledge-base/*.md`) is
-loaded idempotently by content hash and browsable at `/knowledge`.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/incidents/{number}` | Incident with linked tickets, allowed transitions and the latest investigation |
-| `POST` | `/api/v1/incidents/{number}/investigations` | Run the engine (`incidents:investigate` — engineers, admins) |
-| `GET` | `/api/v1/incidents/{number}/investigations` | Investigation history |
-| `POST` | `/api/v1/incidents/{number}/status` | Lifecycle transition (+ root cause) |
-| `GET` | `/api/v1/incidents/{number}/telemetry` | Metric series of affected services, 1 h before onset → now |
-| `GET` | `/api/v1/incidents/{number}/logs?limit=` | Recent WARN/ERROR lines since onset |
-| `GET` | `/api/v1/knowledge`, `/api/v1/knowledge/{slug}` | Knowledge base |
-
-The evidence engine itself is deliberately LLM-free: deterministic, testable and fast (~20 ms). Language models only
-enter at the write-up stage, below, and may only explain evidence that is already stored (ADR 0004).
-
-## Retrieval-augmented generation (RAG)
-
-```
-Incident ─► search query ─► embedding ─► pgvector HNSW (cosine) ─► re-rank ─► runbook passages ─┐
-Logs · metrics · changes · history ─► evidence engine (scored hypothesis) ───────────────────────┴─► writer ─► investigation
+INCIDENT   INC-135  Payment checkout timeout  SEV1 · Critical
+ROOT CAUSE Payment gateway requests from payment-service are exceeding the configured 5000ms client timeout
+           (provider=stripe); checkouts fail when the gateway call times out.            82 % · high confidence
+EVIDENCE   ✓ 35 GatewayTimeoutException events since onset (none in the preceding 2 h)      [LOG-5812]
+           ✓ payment-service p95 latency +407 % (1,049 ms → 5,321 ms)       [METRIC-payment-service-latency]
+           ✓ error rate 0.4 % → 17.0 %                                   [METRIC-payment-service-error-rate]
+           ✓ similar to INC-106 (41 days ago): stripe regional degradation                         [INC-106]
+           ✓ postgres-primary healthy: query p95 14 ms (baseline 13 ms)    [METRIC-postgres-primary-health]
+           · no deployments, config changes or scheduled jobs in the 30 min before onset       [CHANGE-none]
+RUNBOOK    Payment Gateway Timeout Runbook §0 · Payment Service Architecture §2 · Checkout Incident Guide §1
+QUERY      🔒 READ ONLY  Payment outcomes during the incident
+           SELECT status, COUNT(*) …  →  CAPTURED 68 (avg 905 ms) · TIMEOUT 34 (avg 5000 ms)
+NEXT       1. Check the stripe status page and #payments-alerts for a provider-side degradation
+           2. Inspect PAYMENT_GATEWAY_TIMEOUT_MS (currently 5000ms)
+           3. Query affected transactions to size the customer impact
+CHECKS     ✓ Grounding check passed · 7 citations verified
 ```
 
-- **Knowledge base** — 12 fictional ShopStream documents in [`knowledge-base/`](knowledge-base/): runbooks (payment
-  gateway timeout, DB connection pool, SMTP rotation, high CPU), troubleshooting guides (checkout, password reset,
-  slow dashboard, database), architecture notes (payment and authentication services) and the incident response
-  process.
-- **Chunking** ([`chunking.py`](backend/app/ai/chunking.py)) — split on `##`/`###` headings so every chunk belongs to one
-  numbered section (`§2`, `§2.1`) that can be cited; long sections are split on paragraphs. The embedded text is
-  prefixed with *document › heading* so "1. Check the status page" still means something on its own.
-- **Embeddings** ([`embeddings.py`](backend/app/ai/embeddings.py)) — pluggable. The default `hashing-v1` is a
-  deterministic, dependency-free feature-hashed embedding (camelCase splitting, stemming, an ops synonym table that
-  maps *freezes → timeout*, *slow → latency*) so CI and laptops need no model download. `fastembed`
-  (BAAI/bge-small-en-v1.5, `pip install -r requirements-ml.txt`) has the same 384 dimensions — switching is a config
-  change, and because each chunk records the model that embedded it, a switch re-embeds everything automatically.
-- **Storage & search** — `document_chunks.embedding vector(384)` with an HNSW `vector_cosine_ops` index. Retrieval
-  ([`retrieval.py`](backend/app/ai/retrieval.py)) is hybrid: cosine similarity plus small, explainable boosts for the
-  affected service's documents and for curated tags matching the error signature; at most two passages per document.
-- **Query generation** — built from the incident title, the matched log signature and corroborating messages, and
-  stored on the investigation (`search_query`) so retrieval can be audited. For *unknown* failure modes the query
-  uses the strongest new log signal, so a runbook can still help where no hypothesis exists.
-- **Writer** ([`writer.py`](backend/app/ai/writer.py)) — with `OPSPILOT_LLM_PROVIDER=anthropic` Claude writes the root
-  cause, a short narrative and the next steps from the evidence and passages, through a JSON-schema constrained call
-  ([`llm.py`](backend/app/ai/llm.py)). Without a key — or when the call fails — an extractive writer composes the
-  same sections from the evidence summaries, so the product never depends on an LLM being up.
+## RAG & AI evaluation
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/knowledge/search?q=&k=&service=` | Semantic search over passages (the retrieval investigations use) |
-
-![Semantic search over the knowledge base](docs/screenshots/knowledge-semantic-search.jpg)
-
-`python -m app.scripts.reindex` syncs `knowledge-base/` (the API container runs it on start); only changed documents
-are re-chunked and re-embedded.
-
-## Evidence citations & grounding
-
-![Cited write-up, grounding check and sources](docs/screenshots/evidence-citations.jpg)
-
-*"The payment gateway probably timed out"* is not useful during an outage. OpsPilot's write-ups cite every claim:
-
-> 35 GatewayTimeoutException events from payment-service between 09:06 and 09:39 UTC (none in the preceding 2 h)
-> **[LOG-5812]**. payment-service p95 latency increased 407% (1,049 ms → 5,321 ms) **[METRIC-payment-service-latency]**.
-> Similar to incident INC-106 (41 days ago): payment gateway (stripe) regional degradation pushed p95 above the 5 s
-> client timeout **[INC-106]**. postgres-primary remains healthy: query p95 latency 14 ms (baseline 13 ms)
-> **[METRIC-postgres-primary-health]**. See Payment Gateway Timeout Runbook §0 **[RUNBOOK-payment-gateway-timeout §0]**.
->
-> *Grounding check passed · 7 citations verified* — the seeded payment incident, extractive writer
-
-- **Citation keys** are assigned by the evidence engine, never by the model: `LOG-<first log line id>`,
-  `METRIC-<service>-<metric>`, `CHANGE-<log id>`, the incident number for history, and
-  `RUNBOOK|GUIDE|ARCH|PROCESS-<slug> §<section>` for knowledge-base passages (the chunk is stored with the evidence).
-- **Grounding check** ([`grounding.py`](backend/app/ai/grounding.py)) runs on every write-up before it is stored:
-  1. every `[REF]` must exist in this investigation (an invented reference is the clearest hallucination signal);
-  2. every narrative sentence must cite something;
-  3. every number in a sentence must appear in the evidence *that sentence cites* — "5.3 s" fails when the evidence
-     says 5,321 ms, because the reader could not find it where the citation points. Numbers in the root cause must
-     exist somewhere in the evidence.
-- An LLM draft that fails is **not shown**: the extractive write-up (which passes by construction) is used, and the
-  rejected draft's report is stored in `ai_investigations.grounding`, so prompt or model changes can be evaluated by
-  their rejection rate. The UI shows the check result, renders citations as chips that jump to the evidence row, and
-  lists the cited sources.
-
-## AI ticket triage (human in the loop)
-
-When a ticket arrives — *"Customers cannot complete checkout. The payment page freezes."* — OpsPilot suggests how
-to triage it:
-
-```json
-{ "category": "PAYMENTS", "priority": "P1", "service": "payment-service", "confidence": 0.74,
-  "rationale": "Payments keywords: checkout, payment. Priority P1 (failing: cannot, freezes; breadth: Customers; core flow: payments)." }
-```
-
-The suggestion is stored as a **PENDING** `ticket_classifications` row and the ticket is **not changed**. An analyst
-then chooses on the ticket page:
-
-| Action | Effect |
-|---|---|
-| **Accept** | Category, priority and service are applied; timeline + audit record who accepted it |
-| **Modify** | The analyst's values are applied; the prediction is kept next to them (`final_*` columns) |
-| **Reject** | Nothing is applied |
-
-- **Engines** ([`classifier.py`](backend/app/ai/classifier.py)): `keywords-v1` is transparent — category lexicons,
-  impact phrases for priority (*failing* × *breadth* × *core flow*, mirroring the severity table in the incident
-  process document), service from an explicit mention, the category, the product area or, as a last resort, the
-  best-matching knowledge-base document. With an LLM configured, Claude answers through a JSON schema whose enums
-  *are* the categories, priorities and service names from the catalogue, so it cannot invent a service; any failure
-  falls back to the keyword engine.
-- **Feedback loop** — because predictions are never overwritten, every reviewed row is a labelled example.
-  `GET /api/v1/tickets/classifications/metrics` reports the acceptance rate and which fields analysts correct most:
-  the number to watch before trusting a new model or prompt.
-- Re-running the classifier supersedes a pending suggestion; a reviewed suggestion cannot be reviewed again (409).
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/tickets/{number}/classification` | Latest suggestion and its review |
-| `POST` | `/api/v1/tickets/{number}/classification` | Request a fresh suggestion (`tickets:write`) |
-| `POST` | `/api/v1/tickets/{number}/classification/{id}/review` | `{"action": "accept" \| "modify" \| "reject", ...}` |
-| `GET` | `/api/v1/tickets/classifications/metrics` | Acceptance rate and corrections per field |
-
-## Automatic log correlation
-
-![Ticket page: correlated signals, suspected incident and the AI triage suggestion](docs/screenshots/ticket-triage-correlation.jpg)
-
-A ticket says *"Payment screen times out after login"*. Before anyone opens a log viewer, OpsPilot looks at what the
-platform was doing **±15 minutes around the ticket's creation**, for the reported service, the services it depends
-on and the services that depend on it ([`correlation.py`](backend/app/ai/correlation.py)):
-
-```
-payment-service    reported    ! anomalous   19 × GatewayTimeoutException (new)   p95 latency 1,049 ms → 5,321 ms
-postgres-primary   dependency  ✓ normal      query p95 14 ms (baseline 13 ms)
-order-service      dependent   ! anomalous   19 × Payment failed (new)
-→ Matches active incident INC-135 — Payment checkout timeout            [Link ticket]
-```
-
-- WARN/ERROR patterns are compared with the 2 hours before the window (a pattern is *new* at 5× its usual rate), and
-  latency, error rate, connections and CPU with their baseline, using the same rules as the investigation engine.
-  Every pattern keeps its `LOG-<id>` citation key.
-- A ticket with no service is scoped by its AI suggestion's service, or the whole platform.
-- **The AI receives the same signals:** the triage classifier gets the correlation, so a vague ticket
-  (*"something is weird"*) is routed to the service with the most new errors, and the rationale names the active
-  incident it matches. With an LLM, the signals are part of the prompt.
-- An open incident covering an anomalous service is suggested; engineers link the ticket with one click
-  (`POST /api/v1/incidents/{number}/tickets`).
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/tickets/{number}/correlation` | Per-service log patterns and metric deltas around the ticket, suspected incident |
-| `POST` | `/api/v1/incidents/{number}/tickets` | Link a ticket to an incident (`incidents:investigate`) |
-
-## Investigation queries (AI-generated SQL, safely)
-
-Each investigation proposes diagnostic queries against the ShopStream application database — never against
-OpsPilot's own — with the reason to run them:
-
-```
-AI GENERATED QUERY                                   🔒 READ ONLY
-Payment outcomes during the incident
-Why: Confirms that payments fail as TIMEOUT (gateway) rather than DECLINED (issuer), and sizes the impact.
-
-SELECT status, COUNT(*) AS payments, ROUND(AVG(gateway_ms)) AS avg_gateway_ms
-FROM payments
-WHERE created_at BETWEEN '2026-10-25T09:06:00+00:00' AND '2026-10-25T09:40:00+00:00'
-GROUP BY status ORDER BY payments DESC;                                    [Run query] [Edit]
-```
-
-Queries come from the matched hypothesis (curated templates, filled with the investigation window so a re-run
-returns the same rows) and, with an LLM configured, from the model, which receives the schema and the evidence. **No
-proposal is executed automatically.** An engineer runs it, optionally after editing it, and the result table appears
-in place. Defense in depth ([ADR 0006](docs/decisions/0006-ai-generated-sql-safety.md)):
-
-| Layer | Where | What it stops |
-|---|---|---|
-| Permission + audit | API | Only `incidents:investigate`; every run (and every refusal) is an audit event with the SQL |
-| AST validator | [`sql_guard.py`](backend/app/ai/sql_guard.py) (sqlglot) | Anything but one SELECT; INSERT/UPDATE/DELETE/DDL/COPY/SET anywhere in the tree; `SELECT … INTO`; `FOR UPDATE`; tables outside the allowlist (`payments`, `orders`, `password_reset_requests`, `pg_stat_activity`); functions outside the allowlist (`pg_sleep`, `pg_read_file`, `dblink`, `set_config`, …); adds/lowers `LIMIT 200` |
-| Re-validation | [`services/queries.py`](backend/app/services/queries.py) | Stored verdicts and edited SQL are never trusted — validated again at run time |
-| Read-only transaction | PostgreSQL | `SET TRANSACTION READ ONLY`: the database refuses writes even if the validator had a bug |
-| Least privilege | PostgreSQL | `SET LOCAL ROLE opspilot_readonly`: can read the `shopstream` schema, gets *permission denied* on `users`, `tickets`, … |
-| Resource limits | PostgreSQL | `statement_timeout` 3 s, `lock_timeout` 1 s, at most 200 rows fetched |
-| No side effects | Connection | Separate connection, transaction always rolled back |
-
-The tests include a "validator bypassed" fixture that disables the first layers and asserts the database layers still
-refuse `DELETE`, `UPDATE` and reading password hashes, and cancel `pg_sleep`. LLM proposals that fail validation are
-stored as **BLOCKED** with their violations and shown, not hidden — a useful signal when evaluating a model.
-
-![Investigation queries: Why, Risk, Run query, results, and an edited query blocked by the validator](docs/screenshots/investigation-queries.jpg)
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/incidents/{n}/investigations/{id}/queries/{qid}/run` | Run a proposal (body `{"sql": ...}` to run an edited version) |
-| `POST` | `/api/v1/sql/validate` | Dry-run the safety checks, used for live feedback while editing |
-
-## Background workers (Redis Streams)
-
-An LLM call — or even a 100 ms evidence pipeline — should not hold an HTTP request open. Ticket triage and
-investigations run in a worker:
-
-```
-POST /tickets ───────────► ticket saved ─► job row (PostgreSQL) ─► XADD opspilot:jobs ─► 201 in ~60 ms
-POST /incidents/…/investigations ─► QUEUED run + job ───────────────────────────────► 202 in ~60 ms
-
-worker (XREADGROUP)
- ├─ ticket.triage         correlate logs/metrics around the ticket → classify → PENDING suggestion
- └─ incident.investigate  search logs & metrics → score hypotheses → retrieve runbooks (pgvector)
-                          → write cited summary + grounding check → propose queries → save
-                          (each stage committed as it starts, so the UI shows live progress)
-```
-
-| Concern | How |
-|---|---|
-| Delivery | Redis Streams consumer group: each message to exactly one worker; `XACK` when done |
-| Crashed worker | Messages idle > 60 s are taken over with `XAUTOCLAIM` |
-| Failures | 3 attempts with exponential backoff (sorted-set delay queue), then the **dead-letter** stream |
-| Idempotency | Jobs and investigations that already finished are skipped on redelivery |
-| Source of truth | `background_jobs` in PostgreSQL (status, attempts, error, worker, timings); Redis only carries ids |
-| Redis down | The API still answers: the job runs in-process after the response (FastAPI `BackgroundTasks`) |
-| Concurrency | One active investigation per incident (409 otherwise); scale with `docker compose up --scale worker=3` |
-| Shutdown | SIGTERM finishes the current job, then exits |
-
-The incident page polls the queued run every second and shows each stage (`Search logs & metrics ✓ → Retrieve
-runbooks … → Save result`); new tickets show *"AI triage running in the background…"* until the suggestion lands.
-Admins see queue depth, retries, dead letters and per-job timings on `/admin` (`GET /api/v1/jobs`). Why a
-hand-written queue instead of Celery/RQ: the semantics above fit in [`queue.py`](backend/app/workers/queue.py)
-(~100 lines), there is nothing to configure, and RQ's forking worker does not run on Windows.
-
-| Queued investigation (worker paused for the screenshot) | Admin: queue depth and recent jobs |
-|---|---|
-| ![Investigation queued](docs/screenshots/investigation-queued.jpg) | ![Background jobs](docs/screenshots/admin-background-jobs.jpg) |
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/incidents/{number}/investigations` | Queue an investigation → **202** with the QUEUED run |
-| `GET` | `/api/v1/incidents/{number}/investigations/{id}` | Poll status and per-stage progress |
-| `GET` | `/api/v1/jobs` | Queue depth, outcomes by status, recent jobs (admin) |
-
-## Audit trail
-
-Enterprise software has to answer *"who changed this, and when?"* — including what the AI did on its own. Every
-important action writes an `audit_events` row in the same transaction as the change, and the incident page tells the
-story of the incident and its customer tickets from those rows:
-
-```
-09:10:00  Ticket TCK-2026-00301 created by Sam Rivera
-09:10:00  AI classification started for TCK-2026-00301                       auto
-09:10:01  AI predicted PAYMENTS · P1 for TCK-2026-00301 (74% confidence)       auto
-09:11:00  Sam Rivera assigned TCK-2026-00301 to Maria Papadopoulou
-09:12:00  Maria Papadopoulou changed service on TCK-2026-00301 → payment-service
-09:12:00  Incident INC-135 declared by Maria Papadopoulou (SEV1)
-09:40:12  AI investigation started                                             auto
-09:40:12  AI investigation generated: payment_gateway_timeout (80% confidence) auto
-09:46:31  Maria Papadopoulou accepted the AI root cause from investigation #2
-09:52:03  Incident resolved by Maria Papadopoulou
-```
-
-Covered: ticket lifecycle, assignment, edits (with old → new service), comments, AI triage started / predicted /
-reviewed, incident declared / linked / status changes, investigations requested / started / generated / failed, the
-analyst accepting an AI root cause, every investigation query run or refused (with its SQL), sign-ins, failed sign-ins,
-refresh-token reuse, user management, and reads of the audit log itself (verify, export).
-
-**Tamper-evident, not just append-only by convention** ([migration 0009](backend/migrations/versions/0009_tamper_evident_audit_trail.py)):
-
-| Mechanism | What it gives |
-|---|---|
-| `BEFORE INSERT` trigger: `hash = sha256(prev_hash ‖ seq ‖ time ‖ actor ‖ action ‖ entity ‖ changes ‖ ip)` | A hash chain no code path can skip; an advisory lock makes chain order = commit order under concurrency |
-| `BEFORE UPDATE / DELETE / TRUNCATE` trigger raises | The application (or a bug, or SQL injection) cannot rewrite history |
-| `actor_id … ON DELETE RESTRICT` | People with history are deactivated, never erased |
-| `GET /audit/verify` recomputes the chain in SQL | Someone with database access who edits or deletes a row is pointed at (`modified` / `gap`); the response's head hash can be recorded elsewhere to anchor the chain |
-| Maintenance mode (`SET LOCAL opspilot.audit_maintenance`) | The one sanctioned exception — the demo seed backdates history, then re-chains; documented, and verification still passes from a clean seed |
-
-A superuser can still rebuild the entire chain; anchoring the head hash outside the database (or shipping rows to
-WORM storage) is the answer to that, and is noted in the threat model.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/incidents/{number}/activity` | Incident + linked tickets timeline (readers; no IPs or hashes) |
-| `GET` | `/api/v1/tickets/{number}/activity` | Ticket timeline, including worker/AI actions |
-| `GET` | `/api/v1/audit?entity_type=&entity_id=&actor_id=&action=&since=&until=` | Search the full trail (`audit:read`, admins) |
-| `GET` | `/api/v1/audit/verify` | Verify the hash chain |
-| `GET` | `/api/v1/audit/export.csv` | Archive the trail with hashes, in chain order |
-
-## AI feedback
-
-Under every investigation: **Was this investigation useful? 👍 Useful · 👎 Incorrect**. A 👎 asks *why*, because
-each reason points at a different part of the pipeline:
-
-| Reason | Part to fix |
-|---|---|
-| Wrong root cause | hypothesis scoring |
-| Missed important evidence | evidence collectors / correlation window |
-| Irrelevant documentation | retrieval |
-| Steps not helpful | templates / writer |
-| Query wrong or not useful | query planner |
-| Claim not backed by evidence | grounding check |
-
-Stored in `ai_feedback` (`investigation_id`, `user_id`, `rating`, `reason`, `comment`, timestamps): one verdict per
-person per investigation (`UNIQUE`), changeable, `CHECK (rating IN (-1, 1))` and `CHECK (rating = 1 OR reason IS NOT
-NULL)` — an unexplained 👎 cannot be stored. Only completed runs can be rated (409), every vote is audited, and rating
-needs the new `ai:feedback` permission (support agents, engineers, admins; viewers see the counts).
-
-The **AI quality** page (`GET /api/v1/ai/quality`) puts the feedback loops side by side: useful-rate overall, by
-engine version and by diagnosis, reasons for 👎 with the latest comments, how many write-ups passed the grounding check
-and how many LLM drafts it rejected, and the triage-suggestion acceptance rate from human review (Step 13). Feedback
-is what production says; the offline benchmark (next step) is what a change is tested against before it ships.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/v1/incidents/{n}/investigations/{id}/feedback` | Your verdict and everyone's counts |
-| `PUT` | `/api/v1/incidents/{n}/investigations/{id}/feedback` | `{"rating": 1}` or `{"rating": -1, "reason": "MISSING_EVIDENCE", "comment": "…"}` |
-| `DELETE` | `/api/v1/incidents/{n}/investigations/{id}/feedback` | Withdraw your verdict |
-| `GET` | `/api/v1/ai/quality` | AI quality report |
-
-## Evaluation
-
-A demo that looks right on three seeded incidents proves little. [`app/eval`](backend/app/eval) is an offline
-benchmark with known answers, and its report ([docs/evaluation](docs/evaluation/README.md)) is generated from the run —
-no number below is typed by hand:
+A demo that looks right on three seeded incidents proves little. The [offline benchmark](docs/evaluation/README.md)
+has known answers, runs in CI as a regression gate, and its report is generated from the run — nothing is typed by
+hand:
 
 | Suite | Set | Metric | Result |
 |---|---|---|---:|
-| Triage | 50 hand-labelled tickets (clear, vague, misleading) | Category / priority / service accuracy | 82% / 68% / 80% |
-| Retrieval | 40 queries → documents an expert would open | Recall@1 / Recall@3 / MRR | 92% / 100% / 0.96 |
-| Investigations | 41 simulated incidents | Correct root cause (top-1) | 95% |
-| | 37 with an injected fault | Runbook for that fault in the top 3 | 95% |
-| | 4 with nothing wrong | "No known failure mode", confidence ≤ 35 % | 100% |
-| | 253 citations | Resolve to evidence of the same run | 100% |
-| | | Median / p95 latency (engine + writer) | 25 / 44 ms |
+| Triage | 50 hand-labelled tickets (clear, vague, misleading) | Category / priority / service accuracy | 82 % / 68 % / 80 % |
+| Retrieval | 40 queries → documents an expert would open | Recall@1 / Recall@3 / MRR | 92 % / 100 % / 0.96 |
+| Investigations | 41 simulated incidents with injected faults (and 4 with none) | Correct root cause (top-1) | 95 % |
+| | 37 fault cases | Runbook for the injected fault in the top 3 | 95 % |
+| | 4 no-fault cases | "No known failure mode" at ≤ 35 % confidence | 100 % |
+| | 253 citations | Resolve to evidence of the same run | 100 % |
+| Prompt injection | 30 attacks + 25 benign look-alikes + 12 real documents | Attacks quarantined / benign wrongly quarantined | 87 % / 0 % |
 
-- **Ground truth you cannot fudge:** investigation cases are produced by the simulator, so the expected root cause is
-  the fault that was *injected*. Cases vary noise seed, how long the outage has run (5 / 15 / 40 min), which service
-  the incident is declared on (symptom vs root cause), overlapping faults (each incident must find its own cause, not
-  the louder neighbour's) and incidents where nothing is wrong.
-- **It found real bugs.** The first run scored 93% root cause and **62%** runbook recall. Declaring the pool-exhaustion
-  incident on `postgres-primary` gave *unknown*, because the `QueuePool limit` errors are logged by its *callers* and
-  the scope only followed dependencies — it now includes direct dependents. Two sections of one troubleshooting guide
-  crowded the runbook out of the top 3 — investigations now take one passage per document. Result: 95% / 95%. Both
-  runs are in [`history.json`](docs/evaluation/history.json).
-- **Honest about what the numbers mean:** the extractive writer passes the grounding check by construction; with
-  `OPSPILOT_LLM_PROVIDER=anthropic` the same benchmark measures the LLM writer's rejection rate. The hypothesis library
-  has three failure modes, so top-3 is near-trivial and top-1 is reported. Priority is the weakest triage field (vague
-  tickets 40%) — exactly where the human review step exists. Every miss is listed in the report.
-- **Regression gate:** [`test_evaluation.py`](backend/tests/test_evaluation.py) runs all three suites in CI (~35 s) and
-  fails if any metric drops below the published results.
+Ground truth comes from the simulator: the expected root cause is the fault that was *injected*. The first run found
+real bugs (runbook recall was 62 %), and both runs are in the [history](docs/evaluation/history.json). Weak spots are
+reported, not hidden: priority on vague tickets is the lowest triage score, which is why a human reviews every
+suggestion.
 
-```bash
-cd backend && python -m app.eval.run --note "what changed"   # rebuilds docs/evaluation from a fresh database
-```
+## Security
+
+Built as if it will be attacked; every control is implemented and tested. Full write-ups:
+[security controls](docs/security.md) · [threat model](docs/threat-model.md).
+
+| Threat | Mitigation |
+|---|---|
+| SQL injection | ORM / bound parameters everywhere; Bandit + CodeQL |
+| Prompt injection | Retrieved-context isolation (`<untrusted_*>` blocks, forged delimiters defanged), schema-constrained output, injection check on drafts |
+| Malicious knowledge document | Ingestion validation → quarantine (never indexed) → admin review, audited |
+| Privilege escalation | RBAC on every route, proven by a route × role matrix test; nothing reads authorization from model output |
+| Credential theft | 15-minute JWTs in memory; rotating `HttpOnly` refresh tokens with reuse detection; strict CSP |
+| Brute-force login / credential stuffing | Per-account lockout + per-client rate limit across accounts; bcrypt |
+| Sensitive log exposure | Redaction filter for tokens, keys, passwords and e-mails; `422`s never echo secrets |
+| LLM SQL generation | Read-only sandbox: AST allowlist → human click → read-only transaction as a least-privilege role |
+| Vulnerable dependencies / images | pip-audit, npm audit, Trivy image + config scans, Dependabot, SHA-pinned Actions |
 
 ## Testing
 
-| Layer | What | Count | Where |
-|---|---|---:|---|
-| Backend unit | Pure logic — scoring, chunking, embeddings, SQL validator, grounding, workflow rules, audit sentences | 57 | `pytest -m unit` (no services, < 1 s) |
-| Backend integration | Real PostgreSQL + Redis built from the migrations: repositories, services, transactions, constraints, triggers, workers | 153 | `pytest -m integration` |
-| API | Every router through `TestClient`, including validation errors and conflicts | ⤷ | `tests/test_*.py` |
-| Authentication | Login, throttling, refresh rotation and reuse detection, logout, deactivated users | ⤷ | `test_auth.py` |
-| **RBAC matrix** | Every route × every role, derived from the app's dependency tree — a new endpoint without a check fails the build | 50 | `test_rbac_matrix.py` |
-| RAG / AI | Retrieval, grounding, classifier, correlation, query safety (incl. "validator bypassed"), **benchmark regression gate** | ⤷ | `test_rag.py`, `test_evaluation.py` |
-| Database | ORM ↔ migration drift, constraints, append-only audit triggers, hash chain tamper detection | ⤷ | `test_database.py`, `test_audit.py` |
-| Frontend unit + component | Formatting, API client token refresh/retry, activity timeline, feedback widget | 12 | Vitest + Testing Library (`npm test`) |
-| **End-to-end** | Login → declare incident → AI investigation runs in the worker → review evidence → 👍 → resolve → audit trail shows it; viewer cannot act | 2 | Playwright against `docker compose` |
+| Layer | What | Count |
+|---|---|---:|
+| Backend unit | Scoring, chunking, embeddings, SQL validator, grounding, injection scanner, redaction, client IPs | 98 |
+| Backend integration | Real PostgreSQL + Redis built from the migrations: API, services, constraints, triggers, workers, SSE | 201 |
+| RBAC matrix | Every route × every role, derived from the app — a new endpoint without a check fails the build | ⤷ |
+| AI benchmark gate | Triage, retrieval, investigation and prompt-injection suites must not regress | ⤷ |
+| Frontend | Vitest + Testing Library: API client, SSE parser, components | 16 |
+| End-to-end | Playwright against `docker compose`: declare → investigate in the worker → rate → resolve → audit; viewer is read-only | 2 |
 
-Backend total: **241 tests, 95 % line coverage** (`pytest --cov`; CI fails under 90 %). The E2E test drives the real
-stack — Next.js proxy, FastAPI, Redis Streams, the worker and PostgreSQL — not mocks:
+**299 backend tests, 94 % line coverage** (CI fails under 90 %). The
+[pipeline](.github/workflows/ci.yml) runs lint → type check → unit → integration → security scan → Docker build → E2E,
+each stage gated on the ones before; a [security workflow](.github/workflows/security.yml) adds CodeQL, Trivy and
+gitleaks, also weekly. → [Test strategy and failure testing](docs/features.md#testing)
 
-```bash
-docker compose up -d --build
-cd frontend && npx playwright install chromium && npx playwright test
-```
-
-## Failure testing
-
-OpsPilot is used *during* outages, so its own dependencies failing must not take it down. Each failure mode is a
-test ([`test_failures.py`](backend/tests/test_failures.py)); the full matrix is in [docs/resilience.md](docs/resilience.md).
-
-| Failure | Behaviour |
-|---|---|
-| PostgreSQL unavailable | `503 database_unavailable` + `Retry-After` instead of a stack trace; the worker leaves the message unacknowledged and the job runs once the database is back |
-| Redis unavailable | Login throttle and cache fail open, jobs run in-process; each Redis call costs ≤ 0.5 s (found by this step: with no connect timeout and redis-py's default retries, a two-login test took 34 s) |
-| LLM timeout / outage | Extractive write-up and keyword triage; a **circuit breaker** fails fast after 3 consecutive errors and retries one call after 60 s |
-| LLM returns malformed JSON | Truncated, prose, empty, refusal → `LLMError` → deterministic path; *valid but wrong* drafts are caught by the grounding check |
-| Vector search returns nothing | Investigation completes from logs, metrics, changes and history; "No matching documents" |
-| Worker crashes | `XAUTOCLAIM` hands the message to another worker; finished jobs are never re-run |
-| Duplicate ticket | `Idempotency-Key` replays return the original (`200`), concurrent retries create one ticket; the same open report from the same person within 10 min is `409` with the existing number |
-
-```
-LLM unavailable
-
-AI investigation temporarily unavailable.
-Manual investigation tools remain accessible.
-```
-
-That is exactly what the incident page shows when an investigation fails for good, and `GET /api/v1/ai/status`
-(polled by the page) drives a "degraded mode" banner when the LLM circuit is open or the queue is down.
-
-## Observability
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /health` | Liveness — the process is up. Checks nothing else, so a database outage never gets the API restarted in a loop |
-| `GET /ready` | Readiness — PostgreSQL reachable **and migrated to the revision this code expects** (else 503, keep it out of the load balancer); Redis and the LLM circuit are reported as `degraded`, not fatal |
-| `GET /metrics` | Prometheus text format; optional bearer token (`OPSPILOT_METRICS_TOKEN`). The worker exposes its own on `:9101` |
-
-| Signal | Metric |
-|---|---|
-| Request latency · error rate | `opspilot_http_request_duration_seconds{method,route}`, `opspilot_http_requests_total{method,route,status}` — route *templates*, so ids never become labels |
-| AI request latency · token usage | `opspilot_llm_request_duration_seconds{model,outcome=ok\|error\|circuit_open}`, `opspilot_llm_tokens_total{model,direction}` |
-| LLM health | `opspilot_llm_circuit_open`, `opspilot_writeups_total{writer,grounding=passed\|llm_rejected}` |
-| Investigations · RAG retrieval latency | `opspilot_investigation_duration_seconds{outcome}`, `opspilot_investigations_total{outcome,hypothesis}`, `opspilot_rag_retrieval_duration_seconds` |
-| Queue depth · worker failures | `opspilot_queue_messages{state=waiting\|in_progress\|delayed\|dead}` (Redis, at scrape), `opspilot_jobs_total{type,outcome}`, `opspilot_job_duration_seconds{type}` (worker), `opspilot_background_jobs{status}` (PostgreSQL) |
-| Ticket volume · incident MTTR | `opspilot_tickets_created_total{priority}`, `opspilot_tickets_open{priority}`, `opspilot_incidents_active{severity}`, `opspilot_incident_mttr_seconds` (30 days) |
-| Dependencies | `opspilot_dependency_up{dependency=postgres\|redis}` — the scrape succeeds and says what is down |
-
-State gauges are read from Redis and PostgreSQL at scrape time (cached 10 s), so they are true even after a
-restart. Every response carries an **`X-Request-ID`** (accepted from the caller when well-formed, never reflected
-otherwise), and with `OPSPILOT_LOG_FORMAT=json` (the compose default) every log line is one JSON object with that id —
-an access log line per request with route, status and duration; health probes and scrapes are logged only on failure.
-
-```bash
-docker compose --profile observability up -d     # + Prometheus http://localhost:9095 · Grafana http://localhost:3011
-```
-
-Grafana opens on a provisioned **OpsPilot — service & AI overview** dashboard (API, AI, queue & workers, support
-operations; [JSON](infrastructure/observability/grafana/dashboards/opspilot.json)), and Prometheus loads seven
-[alert rules](infrastructure/observability/alerts.yml): 5xx rate, p95 latency, dependency down, queue backlog, dead
-letters, LLM circuit open, and LLM drafts failing the grounding check — the AI-specific alert most dashboards lack.
-
-## CI/CD
-
-Every pull request and every push to `main` runs [one pipeline](.github/workflows/ci.yml). Each stage starts only
-when the stages it depends on are green, so a lint error fails in seconds instead of after the integration suite:
-
-```
-Pull request
-   ├─► Backend lint (ruff check + ruff format)  ┐
-   └─► Frontend lint (ESLint, next/core-web-vitals + typescript, 0 warnings)
-                                                 ├─► Type checking (mypy over app/ · tsc --noEmit)
-                                                 │      ├─► Backend unit tests (no services) ─► Integration tests (PostgreSQL + Redis, coverage ≥ 90 %)
-                                                 │      └─► Frontend unit + component tests (Vitest)
-                                                 └─► Security scan (Bandit SAST · pip-audit · npm audit)
-                                                                    └─► Docker build (docker compose build) ─► E2E (Playwright against the stack)
-```
-
-| Stage | Tool | Fails the build when |
-|---|---|---|
-| Backend lint | `ruff check`, `ruff format --check` | any lint finding or unformatted file (annotations inline on the PR) |
-| Frontend lint | ESLint 9 with `eslint-config-next` | any error **or warning** (`--max-warnings=0`) |
-| Type checking | `mypy` (`check_untyped_defs`, `no_implicit_optional`), `tsc --noEmit` | any type error |
-| Unit tests | `pytest -m unit`, Vitest | any failure |
-| Integration tests | `pytest` against PostgreSQL 16 + pgvector and Redis service containers | any failure, or line coverage under 90 % (the number is written to the job summary) |
-| Security scan | Bandit (`-ll`), `pip-audit --strict`, `npm audit --omit=dev --audit-level=moderate` | a medium+ SAST finding or a known CVE in a runtime dependency |
-| Docker build | `docker compose build` | an image does not build |
-| E2E | Playwright against `docker compose up --wait` | the user journey breaks; the report and container logs are uploaded |
-
-Results at the time of writing (genuine, from the latest local and CI runs): **241 backend tests passing, 95 %
-line coverage**, 13 frontend tests, 2 E2E journeys, mypy clean over 96 modules, ESLint clean, Bandit: 0 medium/high
-findings, pip-audit / npm audit: 0 known vulnerabilities.
-
-## Repository structure
-
-```
-opspilot/
-├── frontend/            Next.js analyst UI (app/, components/, hooks/, services/, tests/{unit,components,e2e})
-├── backend/
-│   ├── app/
-│   │   ├── api/         FastAPI routers
-│   │   ├── auth/        JWT + role-based access control
-│   │   ├── models/      SQLAlchemy ORM models
-│   │   ├── schemas/     Pydantic request/response contracts
-│   │   ├── services/    business rules, one transaction per use case
-│   │   ├── repositories/ database access
-│   │   ├── ai/          evidence engine, chunking, embeddings, retrieval, LLM writer
-│   │   ├── workers/     Redis Streams queue, job handlers, worker loop
-│   │   ├── eval/        offline AI benchmark: datasets, simulated cases, report generator
-│   │   └── core/        config, database, security
-│   └── tests/
-├── simulator/           ShopStream environment (log_generator/, metric_generator/, incidents/)
-├── knowledge-base/      runbooks/, troubleshooting/, architecture/, process/
-├── infrastructure/      docker/ (Dockerfiles), observability/ (Prometheus, alerts, Grafana), terraform/ (planned)
-├── docs/                architecture/, decisions/, evaluation/, screenshots/
-├── .github/workflows/   CI: lint → type check → unit → integration (coverage) → security scan → Docker → E2E
-├── docker-compose.yml
-├── .env.example
-├── CONTRIBUTING.md
-└── LICENSE
-```
-
-## Getting started
+## Running locally
 
 ```bash
 git clone https://github.com/kgiannopoulou/opspilot.git
 cd opspilot
-cp .env.example .env              # optional: the defaults work as-is; .env overrides them
-docker compose up                 # first start builds the images, migrates, seeds the demo (~2–3 min)
+docker compose up          # builds, migrates, seeds 60 days of demo history (~3 min the first time)
 ```
 
 | What | Where |
 |---|---|
-| Analyst UI | http://localhost:3010 — sign in as `maria@opspilot.dev` / `opspilot-demo` (engineer) or `nikos@opspilot.dev` (admin) |
-| API + OpenAPI docs | http://localhost:8010/docs · health `/health` · readiness `/ready` · metrics `/metrics` |
+| Analyst UI | http://localhost:3010 — `maria@opspilot.dev` / `opspilot-demo` (engineer) · `nikos@opspilot.dev` (admin) · `viewer@opspilot.dev` (read-only) |
+| API docs (Swagger) | http://localhost:8010/docs |
+| Health · readiness · metrics | `/health` · `/ready` · `/metrics` |
 | Prometheus · Grafana | `docker compose --profile observability up` → http://localhost:9095 · http://localhost:3011 |
 
-`docker compose up` starts **PostgreSQL** (pgvector), **Redis** (append-only, so queued jobs survive a restart), the
-**API** (applies migrations, loads the demo on first start, syncs the knowledge base), the **worker** and the
-**frontend**, in dependency order: the API is "healthy" only once `/ready` passes (database migrated), and the worker
-and UI wait for it. Scale the worker with `docker compose up --scale worker=3`.
+Everything works without API keys: deterministic embeddings and an extractive writer. Set
+`OPSPILOT_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` in `.env` for Claude-written summaries, triage and query
+proposals ([`.env.example`](.env.example)). Development without Docker: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-| Container hardening | |
+## API
+
+Interactive OpenAPI documentation at **http://localhost:8010/docs** (generated from the FastAPI schemas). The main
+resources:
+
+| Resource | Endpoints |
 |---|---|
-| Non-root users | API/worker run as uid 10001, the UI as `node`; application code is owned by root and not writable by them |
-| Read-only root filesystem | `read_only: true` with a `tmpfs` for `/tmp` (and the Next.js cache) |
-| No capabilities | `cap_drop: [ALL]`, `no-new-privileges` |
-| Small attack surface | Multi-stage builds: dependencies are built in one stage, the runtime image gets only the virtualenv / standalone server and the code — no compilers or package caches; `.dockerignore` keeps `.env`, `.git` and local `node_modules` out of the build context |
-| Health checks | Every service: `pg_isready`, `redis-cli ping`, API `/ready`, worker metrics endpoint, UI `/login` |
-| Local-only data ports | PostgreSQL and Redis are published on `127.0.0.1` only |
+| Auth | `POST /auth/login` · `POST /auth/refresh` (rotating cookie) · `POST /auth/logout` · `GET /auth/me` |
+| Tickets | `GET/POST /tickets` · `GET/PATCH /tickets/{n}` · `/transition` · `/assign` · `/comments` · `/correlation` · `/classification` |
+| Incidents | `GET/POST /incidents` · `GET /incidents/{n}` · `/status` · `/tickets` · `/telemetry` · `/logs` · `/activity` |
+| Investigations | `POST /incidents/{n}/investigations` (202) · `GET …/{id}` · `GET …/{id}/events` (SSE) · `…/queries/{q}/run` · `…/feedback` |
+| Knowledge | `GET /knowledge` · `GET /knowledge/search` · `POST /knowledge` (validated upload) · `GET /knowledge/quarantine` · `POST /knowledge/{slug}/review` |
+| Operations | `GET /dashboard/summary` · `GET /jobs` · `GET /ai/status` · `GET /ai/quality` · `GET /audit` · `GET /audit/verify` |
 
-CI starts this exact compose file and runs the Playwright E2E suite against it.
+All under `/api/v1`, all authenticated except sign-in, all rate-limited.
 
-Optional AI providers (everything works without them): `OPSPILOT_LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`
-for Claude-written summaries, triage and query proposals; `OPSPILOT_EMBEDDING_PROVIDER=fastembed` for sentence
-embeddings. See [`.env.example`](.env.example).
+## Engineering decisions
 
-Ports are deliberately non-default (Postgres 5438, Redis 6381, API 8010, UI 3010) so OpsPilot can run next to
-other local stacks. Local development without Docker for the apps is described in [CONTRIBUTING.md](CONTRIBUTING.md).
+Architecture Decision Records: context, decision, alternatives and consequences.
 
-## Roadmap
+| ADR | Decision |
+|---|---|
+| [001](docs/decisions/001-use-postgresql.md) | PostgreSQL as the single system of record |
+| [002](docs/decisions/002-use-pgvector.md) | pgvector for semantic search instead of a separate vector database |
+| [003](docs/decisions/003-use-redis-workers.md) | Redis Streams background workers, PostgreSQL as the job source of truth |
+| [004](docs/decisions/004-use-sse-over-websockets.md) | Server-Sent Events, not WebSockets, for live progress |
+| [005](docs/decisions/005-rag-retrieval-strategy.md) | RAG retrieval: heading-aligned chunks, hybrid scoring, evidence first |
+| [006](docs/decisions/006-evidence-first-investigations.md) | Evidence-first investigations: the model explains, the evidence decides |
+| [007](docs/decisions/007-ai-generated-sql-safety.md) | AI-generated SQL in a read-only, least-privilege sandbox |
+| [010](docs/decisions/010-prompt-injection-defense.md) | Layered prompt-injection defence |
 
-| # | Step | Status |
-|---|------|--------|
-| 1 | Product identity | ✅ |
-| 2 | Problem definition | ✅ |
-| 3 | Architecture design | ✅ |
-| 4 | Repository structure | ✅ |
-| 5 | Enterprise application simulator | ✅ |
-| 6 | Ticket management system | ✅ |
-| 7 | Database design | ✅ |
-| 8 | Authentication & RBAC | ✅ |
-| 9 | Analyst dashboard | ✅ |
-| 10 | Incident investigation page | ✅ |
-| 11 | RAG: knowledge base, chunking, embeddings, pgvector retrieval, LLM write-up | ✅ |
-| 12 | Evidence citations and grounding check | ✅ |
-| 13 | AI ticket classification with human review | ✅ |
-| 14 | Automatic log & metric correlation for tickets | ✅ |
-| 15 | AI-generated investigation queries with a SQL safety layer | ✅ |
-| 16 | Redis background workers: async triage and investigations with live progress | ✅ |
-| 17 | Audit trail: activity timeline, tamper-evident hash chain, admin audit log | ✅ |
-| 18 | AI feedback: 👍/👎 with reasons, AI quality report | ✅ |
-| 19 | RAG and AI evaluation: labelled benchmark, generated report, CI regression gate | ✅ |
-| 20 | Testing: unit/integration split, RBAC matrix, coverage gate, Vitest, Playwright E2E | ✅ |
-| 21 | Failure testing: DB/Redis/LLM/vector/worker failures, circuit breaker, idempotent tickets | ✅ |
-| 22 | Observability: /health, /ready, /metrics, request ids, JSON logs, Prometheus alerts, Grafana dashboard | ✅ |
-| 23 | Docker: one-command start, readiness-ordered startup, hardened containers | ✅ |
-| 24 | CI/CD: staged pipeline — lint → type check → unit → integration → security scan → Docker → E2E | ✅ |
+[All decisions](docs/decisions/README.md)
+
+## Limitations
+
+- **Simulated data.** ShopStream's logs and metrics come from a simulator. The collectors sit behind a repository
+  interface, but there is no Loki / Prometheus / Datadog connector yet.
+- **Three failure modes.** The hypothesis library knows gateway timeouts, DB pool exhaustion and SMTP failures;
+  anything else gets an honest low-confidence *unknown* with its strongest signal, not a diagnosis.
+- **The benchmark runs without an LLM by default.** The extractive writer passes the grounding check by construction;
+  the LLM writer's rejection rate needs a run with an API key.
+- **Heuristic injection screening.** Paraphrased and non-English instructions get past the scanner (13 % of the
+  red-team set); the other layers are designed for that, but it is not a solved problem.
+- **Single-node scope.** Fixed-window rate limits, a thread per open SSE stream, no HA for PostgreSQL or Redis, TLS
+  terminated outside the stack, local accounts without MFA/SSO.
+
+## Future work
+
+- Connectors for real telemetry (Loki, Prometheus, OpenTelemetry traces) and ticketing systems (Jira, ServiceNow).
+- Learned hypothesis ranking from analyst feedback, and new failure modes proposed from *unknown* investigations.
+- An LLM-based injection classifier as an extra ingestion layer; nonce-based CSP; OIDC single sign-on.
+- Post-incident review drafts from the timeline and audit trail.
+- Cloud deployment (Terraform) with managed PostgreSQL and a public read-only demo.
+
+<details>
+<summary><b>Repository structure</b></summary>
+
+```
+opspilot/
+├── frontend/            Next.js analyst UI (app/, components/, hooks/, services/, tests/{unit,components,e2e,media})
+├── backend/
+│   ├── app/
+│   │   ├── api/         FastAPI routers
+│   │   ├── auth/        JWT, RBAC, rate limits
+│   │   ├── ai/          evidence engine, retrieval, LLM writer, grounding, SQL guard, injection defence
+│   │   ├── services/    business rules, one transaction per use case
+│   │   ├── workers/     Redis Streams queue and job handlers
+│   │   ├── eval/        offline AI benchmark and report generator
+│   │   └── core/        config, database, security, HTTP hardening, redaction, observability
+│   ├── migrations/      Alembic
+│   └── tests/
+├── simulator/           ShopStream services, log/metric generators, incident scenarios
+├── knowledge-base/      runbooks, troubleshooting guides, architecture notes, process
+├── infrastructure/      Dockerfiles, Prometheus, alert rules, Grafana
+├── docs/                architecture, decisions, evaluation, security, threat model, features, media
+└── .github/             CI and security workflows, Dependabot
+```
+
+</details>
 
 ## License
 

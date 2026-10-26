@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (22 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (23 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -690,8 +690,33 @@ opspilot/
 ## Getting started
 
 ```bash
-docker compose up --build        # UI http://localhost:3010 · API http://localhost:8010/docs (+ postgres, redis, worker)
+git clone https://github.com/kgiannopoulou/opspilot.git
+cd opspilot
+cp .env.example .env              # optional: the defaults work as-is; .env overrides them
+docker compose up                 # first start builds the images, migrates, seeds the demo (~2–3 min)
 ```
+
+| What | Where |
+|---|---|
+| Analyst UI | http://localhost:3010 — sign in as `maria@opspilot.dev` / `opspilot-demo` (engineer) or `nikos@opspilot.dev` (admin) |
+| API + OpenAPI docs | http://localhost:8010/docs · health `/health` · readiness `/ready` · metrics `/metrics` |
+| Prometheus · Grafana | `docker compose --profile observability up` → http://localhost:9095 · http://localhost:3011 |
+
+`docker compose up` starts **PostgreSQL** (pgvector), **Redis** (append-only, so queued jobs survive a restart), the
+**API** (applies migrations, loads the demo on first start, syncs the knowledge base), the **worker** and the
+**frontend**, in dependency order: the API is "healthy" only once `/ready` passes (database migrated), and the worker
+and UI wait for it. Scale the worker with `docker compose up --scale worker=3`.
+
+| Container hardening | |
+|---|---|
+| Non-root users | API/worker run as uid 10001, the UI as `node`; application code is owned by root and not writable by them |
+| Read-only root filesystem | `read_only: true` with a `tmpfs` for `/tmp` (and the Next.js cache) |
+| No capabilities | `cap_drop: [ALL]`, `no-new-privileges` |
+| Small attack surface | Multi-stage builds: dependencies are built in one stage, the runtime image gets only the virtualenv / standalone server and the code — no compilers or package caches; `.dockerignore` keeps `.env`, `.git` and local `node_modules` out of the build context |
+| Health checks | Every service: `pg_isready`, `redis-cli ping`, API `/ready`, worker metrics endpoint, UI `/login` |
+| Local-only data ports | PostgreSQL and Redis are published on `127.0.0.1` only |
+
+CI starts this exact compose file and runs the Playwright E2E suite against it.
 
 Optional AI providers (everything works without them): `OPSPILOT_LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`
 for Claude-written summaries, triage and query proposals; `OPSPILOT_EMBEDDING_PROVIDER=fastembed` for sentence
@@ -726,6 +751,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 20 | Testing: unit/integration split, RBAC matrix, coverage gate, Vitest, Playwright E2E | ✅ |
 | 21 | Failure testing: DB/Redis/LLM/vector/worker failures, circuit breaker, idempotent tickets | ✅ |
 | 22 | Observability: /health, /ready, /metrics, request ids, JSON logs, Prometheus alerts, Grafana dashboard | ✅ |
+| 23 | Docker: one-command start, readiness-ordered startup, hardened containers | ✅ |
 
 ## License
 

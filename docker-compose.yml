@@ -1,14 +1,38 @@
 name: opspilot
 
+# Quick start:  cp .env.example .env && docker compose up      →   UI http://localhost:3010 · API http://localhost:8010/docs
+# Metrics too:  docker compose --profile observability up       →   + Prometheus :9095 · Grafana :3011
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: infrastructure/docker/backend.Dockerfile
+  image: opspilot-backend:local
+  # .env.example holds working defaults; your .env (optional) overrides them. The service addresses below win over both.
+  env_file:
+    - path: .env.example
+    - path: .env
+      required: false
+  environment: &backend-env
+    OPSPILOT_DATABASE_URL: postgresql+psycopg://opspilot:${POSTGRES_PASSWORD:-opspilot}@postgres:5432/opspilot
+    OPSPILOT_REDIS_URL: redis://redis:6379/0
+    OPSPILOT_LOG_FORMAT: json
+  # Hardening: immutable root filesystem, no Linux capabilities, no privilege escalation (setuid binaries).
+  read_only: true
+  tmpfs: ["/tmp"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: opspilot
-      POSTGRES_PASSWORD: opspilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot}
       POSTGRES_DB: opspilot
     ports:
-      - "5438:5432"
+      - "127.0.0.1:5438:5432"  # published on localhost only (psql / tests); containers use the compose network
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -16,28 +40,33 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]  # queued jobs survive a Redis restart
     ports:
-      - "6381:6379"
+      - "127.0.0.1:6381:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   api:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/backend.Dockerfile
-    env_file: .env.example
-    environment:
-      OPSPILOT_DATABASE_URL: postgresql+psycopg://opspilot:opspilot@postgres:5432/opspilot
-      OPSPILOT_REDIS_URL: redis://redis:6379/0
-      OPSPILOT_LOG_FORMAT: json
+    <<: *backend
     ports:
       - "8010:8000"
+    healthcheck:
+      # Readiness, not just liveness: healthy once migrated and seeded, so dependants start against a usable API.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,21 +75,40 @@ services:
 
   # Background jobs (AI triage, investigations) from the Redis stream. Scale with: docker compose up --scale worker=3
   worker:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/backend.Dockerfile
-    env_file: .env.example
-    environment:
-      OPSPILOT_DATABASE_URL: postgresql+psycopg://opspilot:opspilot@postgres:5432/opspilot
-      OPSPILOT_REDIS_URL: redis://redis:6379/0
-      OPSPILOT_LOG_FORMAT: json
+    <<: *backend
     command: ["python", "-m", "app.workers.main"]
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9101/metrics', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
       api:
         condition: service_healthy  # the API container applies migrations and seeds on start
     stop_grace_period: 30s  # lets the current job finish (SIGTERM is handled)
+
+  web:
+    build:
+      context: frontend
+      dockerfile: ../infrastructure/docker/frontend.Dockerfile
+    image: opspilot-web:local
+    ports:
+      - "3010:3000"
+    read_only: true
+    tmpfs: ["/tmp", "/app/.next/cache"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
 
   # Metrics and dashboards: docker compose --profile observability up -d
   prometheus:
@@ -92,15 +140,6 @@ services:
     depends_on:
       - prometheus
 
-  web:
-    build:
-      context: frontend
-      dockerfile: ../infrastructure/docker/frontend.Dockerfile
-    ports:
-      - "3010:3000"
-    depends_on:
-      api:
-        condition: service_healthy
-
 volumes:
   postgres-data:
+  redis-data:

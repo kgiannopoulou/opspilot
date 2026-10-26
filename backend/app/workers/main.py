@@ -1,18 +1,22 @@
 """Entry point: `python -m app.workers.main` (the `worker` service in docker-compose)."""
 
-import logging
 import signal
 import threading
 
 import redis
+from prometheus_client import start_http_server
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal
+from app.core.observability import REGISTRY, configure_logging
 from app.workers.worker import Worker
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    settings = get_settings()
+    configure_logging(settings.log_format, settings.log_level)
+    # Job counters and durations live in this process; Prometheus scrapes them here (the API exposes the rest).
+    start_http_server(settings.worker_metrics_port, registry=REGISTRY)
     # Blocking reads need a socket timeout longer than the block time (the API's client uses 0.5 s).
     client = redis.Redis.from_url(get_settings().redis_url, decode_responses=True, socket_timeout=30)
     stop = threading.Event()

@@ -20,6 +20,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3010"]
 
+    # Observability
+    log_format: str = "text"  # "text" | "json" (one JSON object per line, with request ids)
+    log_level: str = "INFO"
+    metrics_token: str | None = None  # if set, GET /metrics requires "Authorization: Bearer <token>"
+    worker_metrics_port: int = 9101
+
     # Authentication
     jwt_secret: str = DEV_JWT_SECRET
     jwt_issuer: str = "opspilot"

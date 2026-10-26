@@ -15,6 +15,7 @@ from functools import lru_cache
 from typing import Any, Protocol
 
 from app.core.config import get_settings
+from app.core.observability import observe_llm
 
 log = logging.getLogger(__name__)
 
@@ -44,9 +45,19 @@ class ClaudeClient:
         self.client = client or anthropic.Anthropic(timeout=timeout, max_retries=2)
 
     def complete_json(self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int = 4096) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            response = self._create(system, prompt, schema, max_tokens)
+        except LLMError:
+            observe_llm(self.model, "error", time.perf_counter() - started)
+            raise
+        observe_llm(self.model, "ok", time.perf_counter() - started, response.usage)
+        return self._parse(response)
+
+    def _create(self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int) -> Any:
         anthropic = self.anthropic
         try:
-            response = self.client.beta.messages.create(
+            return self.client.beta.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
                 system=system,
@@ -64,6 +75,7 @@ class ClaudeClient:
         except anthropic.APIConnectionError as exc:
             raise LLMError("model provider unreachable") from exc
 
+    def _parse(self, response: Any) -> dict[str, Any]:
         if response.stop_reason == "refusal":
             raise LLMError("the model declined to answer")
         if response.stop_reason == "max_tokens":
@@ -138,7 +150,11 @@ class GuardedLLM:
         self.name = client.name
 
     def complete_json(self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int = 4096) -> dict[str, Any]:
-        self.breaker.before_call()
+        try:
+            self.breaker.before_call()
+        except LLMError:
+            observe_llm(self.name, "circuit_open", 0.0)
+            raise
         try:
             data = self.client.complete_json(system, prompt, schema, max_tokens)
         except LLMError as exc:

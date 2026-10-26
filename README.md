@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (21 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (22 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -626,6 +626,38 @@ Manual investigation tools remain accessible.
 That is exactly what the incident page shows when an investigation fails for good, and `GET /api/v1/ai/status`
 (polled by the page) drives a "degraded mode" banner when the LLM circuit is open or the queue is down.
 
+## Observability
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness — the process is up. Checks nothing else, so a database outage never gets the API restarted in a loop |
+| `GET /ready` | Readiness — PostgreSQL reachable **and migrated to the revision this code expects** (else 503, keep it out of the load balancer); Redis and the LLM circuit are reported as `degraded`, not fatal |
+| `GET /metrics` | Prometheus text format; optional bearer token (`OPSPILOT_METRICS_TOKEN`). The worker exposes its own on `:9101` |
+
+| Signal | Metric |
+|---|---|
+| Request latency · error rate | `opspilot_http_request_duration_seconds{method,route}`, `opspilot_http_requests_total{method,route,status}` — route *templates*, so ids never become labels |
+| AI request latency · token usage | `opspilot_llm_request_duration_seconds{model,outcome=ok\|error\|circuit_open}`, `opspilot_llm_tokens_total{model,direction}` |
+| LLM health | `opspilot_llm_circuit_open`, `opspilot_writeups_total{writer,grounding=passed\|llm_rejected}` |
+| Investigations · RAG retrieval latency | `opspilot_investigation_duration_seconds{outcome}`, `opspilot_investigations_total{outcome,hypothesis}`, `opspilot_rag_retrieval_duration_seconds` |
+| Queue depth · worker failures | `opspilot_queue_messages{state=waiting\|in_progress\|delayed\|dead}` (Redis, at scrape), `opspilot_jobs_total{type,outcome}`, `opspilot_job_duration_seconds{type}` (worker), `opspilot_background_jobs{status}` (PostgreSQL) |
+| Ticket volume · incident MTTR | `opspilot_tickets_created_total{priority}`, `opspilot_tickets_open{priority}`, `opspilot_incidents_active{severity}`, `opspilot_incident_mttr_seconds` (30 days) |
+| Dependencies | `opspilot_dependency_up{dependency=postgres\|redis}` — the scrape succeeds and says what is down |
+
+State gauges are read from Redis and PostgreSQL at scrape time (cached 10 s), so they are true even after a
+restart. Every response carries an **`X-Request-ID`** (accepted from the caller when well-formed, never reflected
+otherwise), and with `OPSPILOT_LOG_FORMAT=json` (the compose default) every log line is one JSON object with that id —
+an access log line per request with route, status and duration; health probes and scrapes are logged only on failure.
+
+```bash
+docker compose --profile observability up -d     # + Prometheus http://localhost:9095 · Grafana http://localhost:3011
+```
+
+Grafana opens on a provisioned **OpsPilot — service & AI overview** dashboard (API, AI, queue & workers, support
+operations; [JSON](infrastructure/observability/grafana/dashboards/opspilot.json)), and Prometheus loads seven
+[alert rules](infrastructure/observability/alerts.yml): 5xx rate, p95 latency, dependency down, queue backlog, dead
+letters, LLM circuit open, and LLM drafts failing the grounding check — the AI-specific alert most dashboards lack.
+
 ## Repository structure
 
 ```
@@ -646,7 +678,7 @@ opspilot/
 │   └── tests/
 ├── simulator/           ShopStream environment (log_generator/, metric_generator/, incidents/)
 ├── knowledge-base/      runbooks/, troubleshooting/, architecture/, process/
-├── infrastructure/      docker/ (Dockerfiles), terraform/ (planned)
+├── infrastructure/      docker/ (Dockerfiles), observability/ (Prometheus, alerts, Grafana), terraform/ (planned)
 ├── docs/                architecture/, decisions/, evaluation/, screenshots/
 ├── .github/workflows/   CI: lint, unit + integration tests with coverage, frontend tests + build, Docker, E2E
 ├── docker-compose.yml
@@ -693,6 +725,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 19 | RAG and AI evaluation: labelled benchmark, generated report, CI regression gate | ✅ |
 | 20 | Testing: unit/integration split, RBAC matrix, coverage gate, Vitest, Playwright E2E | ✅ |
 | 21 | Failure testing: DB/Redis/LLM/vector/worker failures, circuit breaker, idempotent tickets | ✅ |
+| 22 | Observability: /health, /ready, /metrics, request ids, JSON logs, Prometheus alerts, Grafana dashboard | ✅ |
 
 ## License
 

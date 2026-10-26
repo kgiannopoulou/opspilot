@@ -18,6 +18,7 @@ from app.ai.llm import get_llm
 from app.ai.query_planner import QueryPlanner
 from app.ai.writer import Writer, get_writer
 from app.core.errors import ConflictError, NotFoundError
+from app.core.observability import INVESTIGATION_LATENCY, INVESTIGATIONS, WRITEUPS
 from app.models import AIEvidence, AIInvestigation, Incident, InvestigationQuery, User
 from app.models.enums import InvestigationStatus, QueryRisk
 from app.services import audit
@@ -136,6 +137,8 @@ class InvestigationService:
         except Exception as exc:
             self.db.rollback()
             self._fail(run, exc, started, final_attempt)
+            INVESTIGATIONS.labels("failed" if final_attempt else "retrying", "-").inc()
+            INVESTIGATION_LATENCY.labels("failed").observe(time.perf_counter() - started)
             raise
 
         run.status = InvestigationStatus.COMPLETED
@@ -191,6 +194,11 @@ class InvestigationService:
             {"investigation_id": run.id, "hypothesis": result.hypothesis_key, "confidence": result.confidence},
         )
         self.db.commit()
+        INVESTIGATIONS.labels("completed", result.hypothesis_key).inc()
+        INVESTIGATION_LATENCY.labels("completed").observe(run.duration_ms / 1000)
+        verdict = "llm_rejected" if "rejected_llm_draft" in draft.grounding else (
+            "passed" if draft.grounding.get("passed") else "failed")  # fmt: skip
+        WRITEUPS.labels(draft.writer, verdict).inc()
         return run
 
     def _fail(self, run: AIInvestigation, exc: Exception, started: float, final_attempt: bool) -> None:

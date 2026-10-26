@@ -35,6 +35,7 @@ services:
     environment:
       OPSPILOT_DATABASE_URL: postgresql+psycopg://opspilot:opspilot@postgres:5432/opspilot
       OPSPILOT_REDIS_URL: redis://redis:6379/0
+      OPSPILOT_LOG_FORMAT: json
     ports:
       - "8010:8000"
     depends_on:
@@ -52,6 +53,7 @@ services:
     environment:
       OPSPILOT_DATABASE_URL: postgresql+psycopg://opspilot:opspilot@postgres:5432/opspilot
       OPSPILOT_REDIS_URL: redis://redis:6379/0
+      OPSPILOT_LOG_FORMAT: json
     command: ["python", "-m", "app.workers.main"]
     healthcheck:
       disable: true
@@ -59,6 +61,36 @@ services:
       api:
         condition: service_healthy  # the API container applies migrations and seeds on start
     stop_grace_period: 30s  # lets the current job finish (SIGTERM is handled)
+
+  # Metrics and dashboards: docker compose --profile observability up -d
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./infrastructure/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9095:9090"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: ["observability"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-opspilot-demo}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/opspilot.json
+    volumes:
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3011:3000"
+    depends_on:
+      - prometheus
 
   web:
     build:

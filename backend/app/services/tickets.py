@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationFailed
+from app.core.observability import TICKETS_CREATED
 from app.models import Ticket, TicketComment, TicketEvent, User
 from app.models.enums import TicketEventType, TicketStatus
 from app.repositories.catalog import ServiceRepository, UserRepository
@@ -120,7 +121,9 @@ class TicketService:
         try:
             self.tickets.add(ticket)
             self._event(ticket, actor, TicketEventType.CREATED, to_value=TicketStatus.OPEN.value)
-            return self._commit(ticket), True
+            self._commit(ticket)
+            TICKETS_CREATED.labels(ticket.priority.value).inc()
+            return ticket, True
         except IntegrityError:
             # Two requests with the same key raced past the lookup: the unique constraint picked a winner.
             self.db.rollback()

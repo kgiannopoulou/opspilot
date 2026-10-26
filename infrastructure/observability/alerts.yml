@@ -1,0 +1,55 @@
+groups:
+  - name: opspilot
+    rules:
+      - alert: OpsPilotApiErrorRateHigh
+        expr: |
+          sum(rate(opspilot_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(opspilot_http_requests_total[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "More than 5% of API requests fail with 5xx"
+
+      - alert: OpsPilotApiSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(opspilot_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "API p95 latency above 1 s"
+
+      - alert: OpsPilotDependencyDown
+        expr: opspilot_dependency_up == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.dependency }} is not answering the API (see docs/resilience.md for impact)"
+
+      - alert: OpsPilotQueueBacklog
+        expr: opspilot_queue_messages{state="waiting"} > 50
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "AI jobs are queuing up: scale the worker (docker compose up --scale worker=3)"
+
+      - alert: OpsPilotDeadLetters
+        expr: increase(opspilot_jobs_total{outcome="dead"}[30m]) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "A background job ran out of attempts (Admin → Background jobs)"
+
+      - alert: OpsPilotLLMCircuitOpen
+        expr: max(opspilot_llm_circuit_open) == 1
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "The LLM provider keeps failing; write-ups and triage run on the deterministic engines"
+
+      - alert: OpsPilotGroundingRejectionsHigh
+        expr: |
+          sum(increase(opspilot_writeups_total{grounding="llm_rejected"}[1h]))
+            / clamp_min(
+                sum(increase(opspilot_writeups_total{writer!="extractive-v1"}[1h]))
+                + sum(increase(opspilot_writeups_total{grounding="llm_rejected"}[1h])), 1) > 0.2
+        labels: { severity: ticket }
+        annotations:
+          summary: "More than 20% of LLM drafts fail the grounding check — check the model or prompt change"

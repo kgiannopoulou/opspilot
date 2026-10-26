@@ -8,6 +8,7 @@ product working — the same "degrade, don't break" rule as the LLM fallback.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -18,6 +19,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.observability import JOB_LATENCY, JOBS
 from app.models import AIInvestigation, BackgroundJob, Ticket
 from app.models.enums import JobStatus
 from app.services import audit
@@ -61,6 +63,7 @@ def run_job(db: Session, queue: JobQueue | None, job_id: uuid.UUID, worker: str)
     job.attempts += 1
     db.commit()
     final_attempt = job.attempts >= MAX_ATTEMPTS or queue is None
+    started = time.perf_counter()
     try:
         HANDLERS[job.type](db, job, final_attempt)
     except Exception as exc:  # noqa: BLE001 — recorded on the job; retried or dead-lettered
@@ -77,9 +80,13 @@ def run_job(db: Session, queue: JobQueue | None, job_id: uuid.UUID, worker: str)
             queue.retry_later(str(job.id), job.type, BACKOFF_SECONDS * 2 ** (job.attempts - 1))
         log.warning("job %s (%s) attempt %s failed: %s", job.id, job.type, job.attempts, job.error)
         db.commit()
+        JOBS.labels(job.type, job.status.value.lower()).inc()
+        JOB_LATENCY.labels(job.type).observe(time.perf_counter() - started)
         return job.status
     job.status, job.finished_at = JobStatus.SUCCEEDED, datetime.now(UTC)
     db.commit()
+    JOBS.labels(job.type, "succeeded").inc()
+    JOB_LATENCY.labels(job.type).observe(time.perf_counter() - started)
     return job.status
 
 

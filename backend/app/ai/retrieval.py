@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.embeddings import Embedder, get_embedder
+from app.core.observability import RETRIEVAL_LATENCY
 from app.models import DocumentChunk, KnowledgeDocument, Service
 
 CANDIDATES = 24  # nearest neighbours fetched from the index before re-ranking
@@ -68,6 +69,12 @@ class KnowledgeRetriever:
         """`per_document` caps passages per document (investigations use 1: three documents beat two sections)."""
         if not query.strip():
             return []
+        with RETRIEVAL_LATENCY.time():
+            return self._search(query, k, service, tags, per_document)
+
+    def _search(
+        self, query: str, k: int, service: str | None, tags: tuple[str, ...], per_document: int
+    ) -> list[Passage]:
         vector = self.embedder.embed([query])[0]
         distance = DocumentChunk.embedding.cosine_distance(vector).label("distance")
         rows = self.db.execute(

@@ -269,6 +269,42 @@ Architecture Decision Records: context, decision, alternatives and consequences.
 - Post-incident review drafts from the timeline and audit trail.
 - Cloud deployment (Terraform) with managed PostgreSQL and a public read-only demo.
 
+## How it was built
+
+In public, step by step: [33 issues across 6 milestones](https://github.com/kgiannopoulou/opspilot/milestones?state=all),
+each closed by the commit that implemented it.
+
+| Milestone | Scope |
+|---|---|
+| [v0.1 — Core Incident Management](https://github.com/kgiannopoulou/opspilot/milestone/1?closed=1) | Problem, architecture, monorepo, tickets, database, dashboard, incident lifecycle |
+| [v0.2 — Observability Data](https://github.com/kgiannopoulou/opspilot/milestone/2?closed=1) | Simulator, log/metric correlation, Redis job queue |
+| [v0.3 — AI Investigation](https://github.com/kgiannopoulou/opspilot/milestone/3?closed=1) | RAG, citations, classification, SQL assistant, feedback, evaluation |
+| [v0.4 — Security & RBAC](https://github.com/kgiannopoulou/opspilot/milestone/4?closed=1) | Auth & RBAC, audit trail, security hardening, threat model, prompt injection |
+| [v0.5 — Production Readiness](https://github.com/kgiannopoulou/opspilot/milestone/5?closed=1) | Tests, failure handling, observability, Docker, CI/CD, ADRs |
+| [v1.0 — Portfolio Release](https://github.com/kgiannopoulou/opspilot/milestone/6?closed=1) | README, demo, screenshots |
+
+<details>
+<summary><b>MVP boundary</b> — what had to exist before anything optional</summary>
+
+| Requirement | Where |
+|---|---|
+| Authentication · RBAC | [`auth/`](backend/app/auth), [`test_rbac_matrix.py`](backend/tests/test_rbac_matrix.py) |
+| Tickets · incidents | [`services/tickets.py`](backend/app/services/tickets.py), [`services/incidents.py`](backend/app/services/incidents.py) |
+| Simulated logs · simulated metrics | [`simulator/`](simulator) |
+| Knowledge documents · RAG · pgvector | [`knowledge-base/`](knowledge-base), [`ai/retrieval.py`](backend/app/ai/retrieval.py) |
+| AI investigation · evidence citations | [`ai/engine.py`](backend/app/ai/engine.py), [`ai/grounding.py`](backend/app/ai/grounding.py) |
+| Audit trail | [`migrations/0009`](backend/migrations/versions/0009_tamper_evident_audit_trail.py) |
+| Next.js dashboard | [`frontend/app`](frontend/app) |
+| PostgreSQL · Redis worker · Docker | [`docker-compose.yml`](docker-compose.yml), [`workers/`](backend/app/workers) |
+| Tests · CI | [`backend/tests`](backend/tests), [`ci.yml`](.github/workflows/ci.yml) |
+
+Build order: foundation (architecture → database → API → auth → RBAC → tickets/incidents → dashboard → Docker), then
+operations data (simulator → logs → metrics → timeline → workers), then AI (knowledge base → embeddings → pgvector →
+RAG → classification → root cause → citations → queries), then production polish (tests → evaluation → security →
+prompt-injection defence → observability → CI/CD → docs → demo).
+
+</details>
+
 <details>
 <summary><b>Repository structure</b></summary>
 

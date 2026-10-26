@@ -103,6 +103,17 @@ class DocumentCategory(StrEnum):
     PROCESS = "process"
 
 
+class DocumentStatus(StrEnum):
+    ACTIVE = "ACTIVE"  # chunked, embedded, retrievable
+    QUARANTINED = "QUARANTINED"  # failed ingestion validation: stored for review, never indexed or retrieved
+    REJECTED = "REJECTED"  # a reviewer confirmed it is malicious or unusable
+
+
+class DocumentSource(StrEnum):
+    REPOSITORY = "repository"  # knowledge-base/ in git (code-reviewed)
+    UPLOAD = "upload"  # POST /knowledge
+
+
 class InvestigationStatus(StrEnum):
     QUEUED = "QUEUED"  # accepted by the API, waiting for a worker
     RUNNING = "RUNNING"

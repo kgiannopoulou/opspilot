@@ -52,8 +52,8 @@ DEFAULT_DB = "postgresql+psycopg://opspilot:opspilot@127.0.0.1:5438/opspilot_eva
 UNKNOWN_MAX_CONFIDENCE = 0.35
 
 
-def _load(name: str) -> list[dict[str, Any]]:
-    return json.loads((DATASETS / f"{name}.json").read_text(encoding="utf-8"))["cases"]
+def _load(name: str, key: str = "cases") -> list[dict[str, Any]]:
+    return json.loads((DATASETS / f"{name}.json").read_text(encoding="utf-8"))[key]
 
 
 def _ms(start: float) -> float:
@@ -156,6 +156,43 @@ def run_retrieval(db: Session, cases: list[dict[str, Any]] | None = None) -> dic
         "mrr": round(sum(1 / r["rank"] for r in rows if r["rank"]) / n, 3) if n else None,
         "latency": _latency(times),
         "misses": [r for r in rows if r["rank"] is None or r["rank"] > 3],
+    }
+
+
+def run_injection() -> dict[str, Any]:
+    """Ingestion scanner (app/ai/injection.py) on a red-team set: attacks must be quarantined, realistic runbook and
+    ticket sentences with the same vocabulary — and every real knowledge-base document — must not be."""
+    from app.ai import injection
+    from app.services.knowledge import FOLDER_CATEGORY, KNOWLEDGE_BASE_DIR
+
+    attacks, benign = _load("injection", "attacks"), _load("injection", "benign")
+    started = time.perf_counter()
+    blocked = {a["id"]: injection.is_blocked(injection.scan(a["text"])) for a in attacks}
+    false_positives = [b for b in benign if injection.is_blocked(injection.scan(b["text"]))]
+    kb_docs = sorted(p for folder in FOLDER_CATEGORY for p in (KNOWLEDGE_BASE_DIR / folder).glob("*.md"))
+    kb_flagged = [p.stem for p in kb_docs if injection.is_blocked(injection.scan(p.read_text(encoding="utf-8")))]
+    elapsed = _ms(started)
+    by_technique: dict[str, dict[str, Any]] = {}
+    for a in attacks:
+        group = by_technique.setdefault(a["technique"], {"cases": 0, "blocked": 0})
+        group["cases"] += 1
+        group["blocked"] += int(blocked[a["id"]])
+    for group in by_technique.values():
+        group["detection_rate"] = _rate(group["blocked"], group["cases"])
+    return {
+        "attacks": len(attacks),
+        "detection_rate": _rate(sum(blocked.values()), len(attacks)),
+        "benign": len(benign),
+        "false_positive_rate": _rate(len(false_positives), len(benign)),
+        "knowledge_base_documents": len(kb_docs),
+        "knowledge_base_false_positives": len(kb_flagged),
+        "by_technique": by_technique,
+        "misses": [
+            {"id": a["id"], "technique": a["technique"], "text": a["text"]} for a in attacks if not blocked[a["id"]]
+        ],
+        "false_positives": [{"id": b["id"], "text": b["text"]} for b in false_positives]
+        + [{"id": s, "text": "(document)"} for s in kb_flagged],
+        "scan_ms_per_text": round(elapsed / (len(attacks) + len(benign) + len(kb_docs)), 2),
     }
 
 
@@ -284,6 +321,7 @@ def render_markdown(results: dict[str, Any]) -> str:
             f"`{meta['engine']}` · writer `{meta['writer']}`.", ""]  # fmt: skip
     out += ["## Summary", "", "| Metric | Result | Set |", "|---|---:|---|"]
     t, r, i = results.get("triage"), results.get("retrieval"), results.get("investigate")
+    pi = results.get("injection")
     if t:
         out += [f"| Ticket category accuracy | {_pct(t['category_accuracy'])} | {t['cases']} hand-labelled tickets |",
                 f"| Ticket priority accuracy | {_pct(t['priority_accuracy'])} | 〃 |",
@@ -303,6 +341,12 @@ def render_markdown(results: dict[str, Any]) -> str:
                 f"| Write-ups passing the grounding check | {_pct(i['grounding_pass_rate'])} | all cases |",
                 f"| Median / p95 investigation latency | {i['latency']['median_ms']:.0f} ms / "
                 f"{i['latency']['p95_ms']:.0f} ms | engine + writer, in-process |"]  # fmt: skip
+    if pi:
+        out += [f"| Prompt-injection attacks quarantined at ingestion | {_pct(pi['detection_rate'])} | "
+                f"{pi['attacks']} red-team texts |",
+                f"| Benign texts wrongly quarantined | {_pct(pi['false_positive_rate'])} | {pi['benign']} runbook / "
+                f"ticket sentences + {pi['knowledge_base_false_positives']} of {pi['knowledge_base_documents']} "
+                "real documents |"]  # fmt: skip
     out.append("")
     if t:
         out += ["## Triage classification", "",
@@ -352,6 +396,18 @@ def render_markdown(results: dict[str, Any]) -> str:
         if not i["misses"]:
             out.append("| — | | | | |")
         out += ["", "</details>", ""]
+    if pi:
+        out += ["## Prompt-injection screening", "",
+                "The ingestion scanner is one layer of the prompt-injection defence ([docs/security.md]"
+                "(../security.md#prompt-injection)): it keeps obvious attacks out of the index. What it misses is "
+                "still isolated as data in the prompt, and a draft that repeats injected instructions is rejected.",
+                "", "| Technique | Texts | Quarantined |", "|---|---:|---:|"]  # fmt: skip
+        out += [f"| {k} | {v['cases']} | {_pct(v['detection_rate'])} |" for k, v in pi["by_technique"].items()]
+        out += ["", f"Scanning takes {pi['scan_ms_per_text']} ms per text.", "",
+                "<details><summary>Not caught (known limits: paraphrase and non-English instructions)</summary>", "",
+                "| Id | Technique | Text |", "|---|---|---|"]  # fmt: skip
+        out += [f"| {m['id']} | {m['technique']} | {m['text']} |" for m in pi["misses"]] or ["| — | | |"]
+        out += ["", "</details>", ""]
     if results.get("history"):
         out += ["## History", "", "Every full run is appended to [`history.json`](history.json), so a change is judged "
                 "against the runs before it.", "",
@@ -367,7 +423,8 @@ def render_markdown(results: dict[str, Any]) -> str:
     out += ["## Reproduce", "", "```bash", "docker compose up -d postgres redis",
             "cd backend && python -m app.eval.run      # ~2 minutes; writes docs/evaluation/", "```", "",
             "Datasets: [`triage.json`](../../backend/app/eval/datasets/triage.json), "
-            "[`retrieval.json`](../../backend/app/eval/datasets/retrieval.json), investigation cases in "
+            "[`retrieval.json`](../../backend/app/eval/datasets/retrieval.json), "
+            "[`injection.json`](../../backend/app/eval/datasets/injection.json), investigation cases in "
             "[`cases.py`](../../backend/app/eval/cases.py). The regression gate in CI "
             "([`test_evaluation.py`](../../backend/tests/test_evaluation.py)) fails if a change drops below these "
             "results.", ""]  # fmt: skip
@@ -399,12 +456,12 @@ def main() -> None:
     import os
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--suite", choices=["triage", "retrieval", "investigate"], action="append")
+    parser.add_argument("--suite", choices=["triage", "retrieval", "investigate", "injection"], action="append")
     parser.add_argument("--database-url", default=os.environ.get("OPSPILOT_EVAL_DATABASE_URL", DEFAULT_DB))
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--note", default="", help="what changed since the last run (kept in history.json)")
     args = parser.parse_args()
-    suites = args.suite or ["triage", "retrieval", "investigate"]
+    suites = args.suite or ["triage", "retrieval", "investigate", "injection"]
 
     now = datetime.now(UTC).replace(second=0, microsecond=0)
     factory = sessionmaker(bind=_engine_for(args.database_url), autoflush=False, expire_on_commit=False)
@@ -417,6 +474,8 @@ def main() -> None:
                 results["triage"] = run_triage(db)
             elif suite == "retrieval":
                 results["retrieval"] = run_retrieval(db)
+            elif suite == "injection":
+                results["injection"] = run_injection()
             else:
                 results["investigate"] = run_investigations(db, now)
             print(f"{suite}: done in {_ms(started) / 1000:.1f} s")

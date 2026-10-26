@@ -11,7 +11,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from app.ai import injection
 from app.ai.engine import InvestigationResult
+from app.ai.injection import UNTRUSTED_CONTENT_RULES
 from app.ai.llm import LLMClient, LLMError
 from app.ai.sql_guard import Verdict, validate
 from app.models import Incident
@@ -28,13 +30,18 @@ SCHEMA_DOC = """ShopStream application database (PostgreSQL, read-only):
 - password_reset_requests(id bigint, user_ref text, status text: SENT|FAILED, error text, created_at timestamptz)
 - pg_stat_activity (PostgreSQL sessions)"""
 
-SYSTEM_PROMPT = """You help an application support engineer investigate a live incident. Propose read-only \
+SYSTEM_PROMPT = (
+    """You help an application support engineer investigate a live incident. Propose read-only \
 PostgreSQL queries that would confirm or rule out the suspected root cause, or size the customer impact.
 
 Rules: a single SELECT per query; only the tables listed in SCHEMA; filter by the incident window given; no writes, \
 no locks, no administrative functions. Do not repeat the queries already proposed. Each query needs a short title \
 and a one-sentence purpose saying what the result would show. Propose at most two queries; propose none if the \
-existing ones already cover the question."""
+existing ones already cover the question.
+
+"""
+    + UNTRUSTED_CONTENT_RULES
+)
 
 QUERIES_SCHEMA = {
     "type": "object",
@@ -82,10 +89,11 @@ class QueryPlanner:
         evidence = "\n".join(f"- [{e.ref}] {e.summary}" for e in result.evidence if e.ref)
         proposed = "\n\n".join(f"-- {p.title}\n{p.sql}" for p in existing) or "(none)"
         prompt = (
-            f"{SCHEMA_DOC}\n\nINCIDENT {incident.number}: {incident.title}\n"
+            f"{SCHEMA_DOC}\n\nINCIDENT {incident.number}:\n{injection.isolate('incident_report', incident.title)}\n"
             f"WINDOW: {result.window_start.isoformat(timespec='seconds')} to "
             f"{result.window_end.isoformat(timespec='seconds')} (UTC)\n"
-            f"SUSPECTED ROOT CAUSE: {result.root_cause}\n\nEVIDENCE:\n{evidence}\n\nALREADY PROPOSED:\n{proposed}"
+            f"SUSPECTED ROOT CAUSE: {result.root_cause}\n\nEVIDENCE:\n{injection.isolate('evidence', evidence)}"
+            f"\n\nALREADY PROPOSED:\n{proposed}"
         )
         try:
             data = llm.complete_json(SYSTEM_PROMPT, prompt, QUERIES_SCHEMA, max_tokens=4096)

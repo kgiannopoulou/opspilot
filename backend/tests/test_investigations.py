@@ -162,7 +162,14 @@ def test_incident_telemetry_and_logs(client, demo):
 
 def test_knowledge_base_loading_is_idempotent(client, db, demo):
     users, _ = demo
-    assert load_knowledge_base(db) == {"created": 0, "updated": 0, "unchanged": 12, "reindexed": 0, "chunks": 0}
+    assert load_knowledge_base(db) == {
+        "created": 0,
+        "updated": 0,
+        "unchanged": 12,
+        "reindexed": 0,
+        "chunks": 0,
+        "quarantined": 0,
+    }
     assert db.query(KnowledgeDocument).count() == 12
 
     docs = client.get("/api/v1/knowledge", headers=as_user(users["viewer"])).json()

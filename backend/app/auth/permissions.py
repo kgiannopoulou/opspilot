@@ -14,6 +14,8 @@ class Permission(StrEnum):
     SERVICES_MANAGE = "services:manage"
     AUDIT_READ = "audit:read"
     AI_FEEDBACK = "ai:feedback"  # rate AI investigations (👍 / 👎)
+    KNOWLEDGE_WRITE = "knowledge:write"  # submit documents (always scanned; suspicious ones are quarantined)
+    KNOWLEDGE_REVIEW = "knowledge:review"  # release or reject quarantined documents
 
 
 class RoleName(StrEnum):
@@ -29,7 +31,13 @@ ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
     RoleName.VIEWER: frozenset(_READ),
     RoleName.SUPPORT_AGENT: frozenset(_READ | {Permission.TICKETS_WRITE, Permission.AI_FEEDBACK}),
     RoleName.ENGINEER: frozenset(
-        _READ | {Permission.TICKETS_WRITE, Permission.INCIDENTS_INVESTIGATE, Permission.AI_FEEDBACK}
+        _READ
+        | {
+            Permission.TICKETS_WRITE,
+            Permission.INCIDENTS_INVESTIGATE,
+            Permission.AI_FEEDBACK,
+            Permission.KNOWLEDGE_WRITE,
+        }
     ),
     RoleName.ADMIN: frozenset(Permission),
 }

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.ai.embeddings import Embedder, get_embedder
 from app.core.observability import RETRIEVAL_LATENCY
 from app.models import DocumentChunk, KnowledgeDocument, Service
+from app.models.enums import DocumentStatus
 
 CANDIDATES = 24  # nearest neighbours fetched from the index before re-ranking
 SERVICE_BOOST = 0.05
@@ -82,6 +83,8 @@ class KnowledgeRetriever:
             .join(KnowledgeDocument, KnowledgeDocument.id == DocumentChunk.document_id)
             .outerjoin(Service, Service.id == KnowledgeDocument.service_id)
             .where(DocumentChunk.embedding_model == self.embedder.name)
+            # Quarantined documents have no chunks; this filter is the second lock on the same door.
+            .where(KnowledgeDocument.status == DocumentStatus.ACTIVE)
             .order_by(distance)
             .limit(CANDIDATES)
         ).all()

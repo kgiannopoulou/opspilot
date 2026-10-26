@@ -1,10 +1,13 @@
+from datetime import datetime
+from typing import Any
+
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
-from app.models.enums import DocumentCategory, db_enum
+from app.models.enums import DocumentCategory, DocumentSource, DocumentStatus, db_enum
 from app.models.service import Service
 
 EMBEDDING_DIMENSIONS = 384  # e.g. all-MiniLM-L6-v2; fixed per column, so changing models means a migration
@@ -23,6 +26,17 @@ class KnowledgeDocument(TimestampMixin, Base):
     content: Mapped[str] = mapped_column(Text)
     # sha256 of the content: re-chunk/re-embed only when a document actually changed.
     content_hash: Mapped[str] = mapped_column(String(64))
+    # Ingestion validation (app/ai/injection.py): only ACTIVE documents are chunked and retrievable.
+    status: Mapped[DocumentStatus] = mapped_column(
+        db_enum(DocumentStatus, "document_status"), server_default=DocumentStatus.ACTIVE.value
+    )
+    scan_findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default="[]")
+    source: Mapped[DocumentSource] = mapped_column(
+        db_enum(DocumentSource, "document_source"), server_default=DocumentSource.REPOSITORY.value
+    )
+    uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     service: Mapped[Service | None] = relationship(lazy="joined")
 

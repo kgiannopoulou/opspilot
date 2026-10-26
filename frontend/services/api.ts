@@ -285,3 +285,14 @@ export function query(params: Record<string, string | number | boolean | string[
   const s = q.toString();
   return s ? `?${s}` : "";
 }
+
+/** Open an authenticated streaming response (Server-Sent Events). EventSource cannot send the bearer token, so the
+ *  stream is a plain fetch whose body is read incrementally; see services/sse.ts. */
+export async function openStream(path: string, signal: AbortSignal, retry = true): Promise<Response> {
+  const headers = new Headers({ Accept: "text/event-stream" });
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const res = await fetch(`${BASE}${path}`, { headers, signal, cache: "no-store" });
+  if (res.status === 401 && retry && (await refreshSession())) return openStream(path, signal, false);
+  if (!res.ok || !res.body) throw await readError(res);
+  return res;
+}

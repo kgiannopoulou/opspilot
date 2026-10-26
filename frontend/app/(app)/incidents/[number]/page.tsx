@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
+import { useInvestigationStream } from "@/hooks/useInvestigationStream";
 import {
   post, type ActivityItem, type AIStatus, type Evidence, type IncidentDetail, type IncidentStatus, type IncidentTelemetry, type Investigation, type LogLine,
 } from "@/services/api";
@@ -294,11 +295,12 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
   const [rootCause, setRootCause] = useState("");
   const [error, setError] = useState<string | null>(null);
   const canInvestigate = can("incidents:investigate");
-  // While an investigation is queued or running, poll it every second; reload the incident when it finishes.
+  // While an investigation is queued or running, the worker pushes each stage over Server-Sent Events (polling if
+  // the stream is unavailable); reload the incident when it finishes.
   const latest = incident.data?.latest_investigation;
   const activeId = latest && (latest.status === "QUEUED" || latest.status === "RUNNING") ? latest.id : null;
-  const live = useApi<Investigation>(activeId ? `/incidents/${number}/investigations/${activeId}` : null, { pollMs: 1_000 });
-  const liveStatus = live.data?.id === activeId ? live.data?.status : undefined;
+  const live = useInvestigationStream(number, activeId);
+  const liveStatus = live?.status;
   useEffect(() => {
     if (liveStatus === "COMPLETED" || liveStatus === "FAILED") { void incident.reload(); void activity.reload(); }
   }, [liveStatus]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -320,7 +322,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
   if (incident.loading && !incident.data) return <Spinner />;
   if (incident.error && !incident.data) return <ErrorBox message={incident.error} />;
   const i = incident.data!;
-  const inv = activeId && live.data?.id === activeId ? live.data : i.latest_investigation;
+  const inv = activeId && live ? live : i.latest_investigation;
   const primary = i.primary_service?.name;
   const charts = (telemetry.data?.series ?? [])
     .filter((s) => METRIC_LABEL[s.metric])

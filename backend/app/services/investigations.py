@@ -22,6 +22,7 @@ from app.core.observability import INVESTIGATION_LATENCY, INVESTIGATIONS, WRITEU
 from app.models import AIEvidence, AIInvestigation, Incident, InvestigationQuery, User
 from app.models.enums import InvestigationStatus, QueryRisk
 from app.services import audit
+from app.services.live_updates import publish_investigation
 
 # (key, label) in execution order; the engine reports the first three itself (see InvestigationEngine.investigate).
 PIPELINE: list[tuple[str, str]] = [
@@ -100,6 +101,7 @@ class InvestigationService:
         audit.record(self.db, actor, "incident.investigation_requested", "incident", incident.number,
                      {"investigation_id": run.id})  # fmt: skip
         self.db.commit()
+        publish_investigation(run.id)
         return run
 
     def _step(self, run: AIInvestigation, key: str) -> None:
@@ -113,6 +115,7 @@ class InvestigationService:
                 stage.update(status="running", started_at=now)
         run.progress = progress
         self.db.commit()
+        publish_investigation(run.id)
 
     def execute(self, run: AIInvestigation, final_attempt: bool = True) -> AIInvestigation:
         """Run the pipeline for a QUEUED (or retried) investigation. Completed runs are left alone (idempotent)."""
@@ -126,6 +129,7 @@ class InvestigationService:
         audit.record(self.db, None, "incident.investigation_started", "incident", incident.number,
                      {"investigation_id": run.id, "attempt": run.attempts})  # fmt: skip
         self.db.commit()
+        publish_investigation(run.id)
         writer = self.writer or get_writer()
         try:
             result = InvestigationEngine(self.db).investigate(incident, step=lambda key: self._step(run, key))
@@ -194,6 +198,7 @@ class InvestigationService:
             {"investigation_id": run.id, "hypothesis": result.hypothesis_key, "confidence": result.confidence},
         )
         self.db.commit()
+        publish_investigation(run.id)
         INVESTIGATIONS.labels("completed", result.hypothesis_key).inc()
         INVESTIGATION_LATENCY.labels("completed").observe(run.duration_ms / 1000)
         verdict = "llm_rejected" if "rejected_llm_draft" in draft.grounding else (
@@ -223,6 +228,7 @@ class InvestigationService:
         else:
             run.status = InvestigationStatus.QUEUED
         self.db.commit()
+        publish_investigation(run.id)
 
     def run(self, incident: Incident, actor: User | None, now: datetime | None = None) -> AIInvestigation:
         """Request and execute in-process (seed data, tests, fallback). A failure is stored, then re-raised."""

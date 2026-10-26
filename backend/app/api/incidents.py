@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 import redis
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -36,6 +37,7 @@ from app.services.audit import AuditService
 from app.services.feedback import FeedbackService
 from app.services.incidents import IncidentService, allowed_incident_transitions
 from app.services.investigations import InvestigationService
+from app.services.live_updates import investigation_stream
 from app.services.queries import QueryService
 from app.workers.jobs import JobService
 
@@ -176,6 +178,30 @@ def run_investigation(
 def get_investigation(number: str, investigation_id: int, db: DB, _: Reader) -> InvestigationOut:
     incident = IncidentService(db).get(number)
     return InvestigationOut.model_validate(InvestigationService(db).get(incident, investigation_id))
+
+
+@router.get(
+    "/{number}/investigations/{investigation_id}/events",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"text/event-stream": {}}, "description": "progress … done"}},
+)
+def investigation_events(
+    number: str,
+    investigation_id: int,
+    db: DB,
+    _: Reader,
+    client: Annotated[redis.Redis, Depends(get_redis)],
+) -> StreamingResponse:
+    """Server-Sent Events: a `progress` event with the full investigation each time a pipeline stage changes, then
+    `done`. Lookup and authorization happen before the stream opens, so a bad id is a plain 404."""
+    incident = IncidentService(db).get(number)
+    run = InvestigationService(db).get(incident, investigation_id)
+    stream = investigation_stream(db, client, run.id, lambda r: InvestigationOut.model_validate(r).model_dump_json())
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},  # no proxy buffering of the stream
+    )
 
 
 @router.get("/{number}/investigations/{investigation_id}/feedback", response_model=FeedbackSummary)

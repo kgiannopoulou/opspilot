@@ -1,6 +1,6 @@
 """Rules-based investigation engine (rules-v1).
 
-Evidence first (ADR 0004): collectors query the stored logs, metrics, incident history and knowledge base; each
+Evidence first (ADR 006): collectors query the stored logs, metrics, incident history and knowledge base; each
 finding becomes an `Evidence` item with the numbers behind it. Every known hypothesis whose signature appears in the
 logs is scored only from that evidence, and the best-supported one wins:
 

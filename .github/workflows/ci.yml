@@ -134,6 +134,7 @@ jobs:
     env:
       OPSPILOT_TEST_DATABASE_URL: postgresql+psycopg://opspilot:opspilot@localhost:5432/opspilot_test
       OPSPILOT_TEST_REDIS_URL: redis://localhost:6379/15
+      OPSPILOT_REDIS_URL: redis://localhost:6379/14  # live-update notifications published by the services
     defaults:
       run:
         working-directory: backend

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, false, func, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, false, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,9 @@ class Ticket(TimestampMixin, Base):
         Index("ix_tickets_status_priority_created", "status", "priority", text("created_at DESC")),
         Index("ix_tickets_service_id", "service_id"),
         Index("ix_tickets_assignee_id", "assignee_id"),
+        # A retried POST with the same Idempotency-Key returns the original ticket instead of creating another.
+        UniqueConstraint("reporter_id", "idempotency_key", name="uq_tickets_reporter_idempotency_key"),
+        Index("ix_tickets_reporter_fingerprint", "reporter_id", "request_fingerprint"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -43,6 +46,9 @@ class Ticket(TimestampMixin, Base):
     triaged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str | None] = mapped_column(String(100))
+    # sha256 of the normalised title, description and service: spots the same report submitted twice.
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
     service: Mapped[Service | None] = relationship(lazy="joined")
     reporter: Mapped[User] = relationship(foreign_keys=[reporter_id], lazy="joined")

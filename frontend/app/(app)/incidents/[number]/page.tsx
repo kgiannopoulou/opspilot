@@ -13,7 +13,7 @@ import {
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  post, type ActivityItem, type Evidence, type IncidentDetail, type IncidentStatus, type IncidentTelemetry, type Investigation, type LogLine,
+  post, type ActivityItem, type AIStatus, type Evidence, type IncidentDetail, type IncidentStatus, type IncidentTelemetry, type Investigation, type LogLine,
 } from "@/services/api";
 
 const STATUS_ACTION: Record<IncidentStatus, string> = {
@@ -168,7 +168,18 @@ function InvestigationPanel({ incidentNumber, inv, canInvestigate, canRate, runn
     return <Card title="AI investigation"><InvestigationProgress inv={inv} /></Card>;
   }
   if (inv.status === "FAILED") {
-    return <Card title="AI investigation" action={runButton}><ErrorBox message={`Investigation failed: ${inv.error}`} /></Card>;
+    return (
+      <Card title="AI investigation" action={runButton}>
+        <div className="rounded-lg border border-[#fab219]/40 bg-[#fab219]/5 px-4 py-3 text-sm">
+          <p className="font-medium text-[#fcd27a]">AI investigation temporarily unavailable.</p>
+          <p className="mt-1 text-slate-300">
+            Manual investigation tools remain accessible: telemetry, recent errors and linked tickets on this page, the
+            knowledge base, and the incident lifecycle. {canInvestigate && "You can retry the investigation at any time."}
+          </p>
+          <p className="mt-2 font-mono text-[11px] text-slate-500">Last attempt failed after {inv.attempts} attempt(s): {inv.error}</p>
+        </div>
+      </Card>
+    );
   }
 
   const findings = inv.evidence.filter((e) => e.kind !== "DOCUMENT");
@@ -277,6 +288,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
   const telemetry = useApi<IncidentTelemetry>(`/incidents/${number}/telemetry`, { pollMs: 60_000 });
   const logs = useApi<LogLine[]>(`/incidents/${number}/logs?limit=25`, { pollMs: 30_000 });
   const activity = useApi<ActivityItem[]>(`/incidents/${number}/activity`, { pollMs: 15_000 });
+  const aiStatus = useApi<AIStatus>("/ai/status", { pollMs: 30_000 });
   const [running, setRunning] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [rootCause, setRootCause] = useState("");
@@ -341,6 +353,11 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
       </div>
 
       {error && <ErrorBox message={error} />}
+      {aiStatus.data?.degraded && (
+        <div role="status" className="rounded-lg border border-[#fab219]/40 bg-[#fab219]/5 px-4 py-2 text-sm text-[#fcd27a]">
+          ⚠ AI running in degraded mode — {aiStatus.data.message} Manual investigation tools are unaffected.
+        </div>
+      )}
       {resolving && (
         <Card title="Resolve incident">
           <label className="text-xs text-slate-400" htmlFor="root-cause">Root cause (required)</label>

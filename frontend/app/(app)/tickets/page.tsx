@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, ErrorBox, Pager, PriorityBadge, Spinner, StatusBadge, relativeTime } from "@/components/ui";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/hooks/useAuth";
-import { post, query, type Page, type Priority, type ServiceOut, type Ticket } from "@/services/api";
+import { ApiError, api, query, type Page, type Priority, type ServiceOut, type Ticket } from "@/services/api";
 
 const OPEN = ["OPEN", "TRIAGED", "INVESTIGATING"];
 const VIEWS = { open: OPEN, resolved: ["RESOLVED"], closed: ["CLOSED"], all: [] as string[] };
@@ -83,16 +83,24 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: () 
   const { data: services } = useApi<ServiceOut[]>("/services");
   const [form, setForm] = useState({ title: "", description: "", priority: "P3" as Priority, service: "" });
   const [error, setError] = useState<string | null>(null);
+  const [duplicateOf, setDuplicateOf] = useState<string | null>(null);
+  // One key per form: a double click or a retried request returns the same ticket instead of creating two.
+  const idempotencyKey = useRef(crypto.randomUUID());
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function create(allowDuplicate = false) {
+    setError(null);
     try {
-      await post("/tickets", { ...form, service: form.service || null });
+      await api(`/tickets${allowDuplicate ? "?allow_duplicate=true" : ""}`, {
+        method: "POST", headers: { "Idempotency-Key": idempotencyKey.current },
+        body: JSON.stringify({ ...form, service: form.service || null }),
+      });
       onCreated();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (err instanceof ApiError && err.status === 409 && typeof err.body?.existing === "string") setDuplicateOf(err.body.existing);
+      else setError(err instanceof Error ? err.message : String(err));
     }
   }
+  function submit(e: React.FormEvent) { e.preventDefault(); void create(); }
 
   const input = "w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-sky-500";
   return (
@@ -108,6 +116,12 @@ function NewTicket({ onClose, onCreated }: { onClose: () => void; onCreated: () 
         </select>
         <textarea required placeholder="What is the customer seeing?" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={`${input} md:col-span-4`} rows={3} />
         {error && <p className="text-sm text-red-300 md:col-span-4">{error}</p>}
+        {duplicateOf && (
+          <p className="text-sm text-[#fcd27a] md:col-span-4">
+            You reported the same thing a few minutes ago: <Link href={`/tickets/${duplicateOf}`} className="font-mono underline">{duplicateOf}</Link>.{" "}
+            <button type="button" onClick={() => { idempotencyKey.current = crypto.randomUUID(); void create(true); }} className="underline">Create anyway</button>
+          </p>
+        )}
         <div className="flex gap-2 md:col-span-4">
           <button className="rounded-md bg-sky-500 px-3 py-1.5 text-sm font-semibold text-slate-950">Create</button>
           <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-slate-400">Cancel</button>

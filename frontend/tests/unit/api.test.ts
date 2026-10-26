@@ -48,4 +48,12 @@ describe("api client", () => {
       status: 409, message: "investigation 3 is already in progress",
     });
   });
+
+  it("keeps machine-readable error details, e.g. the ticket a duplicate points to", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(409, { error: "conflict", detail: "looks like a duplicate", existing: "TCK-2026-00042" })));
+    const { post, ApiError } = await import("@/services/api");
+    const error = await post("/tickets", {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as InstanceType<typeof ApiError>).body?.existing).toBe("TCK-2026-00042");
+  });
 });

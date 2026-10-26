@@ -162,6 +162,10 @@ export interface AuditEvent extends ActivityItem {
   changes: Record<string, unknown>; ip_address: string | null; chain_seq: number | null; prev_hash: string | null;
   hash: string | null;
 }
+export interface AIStatus {
+  llm: { provider: string; model: string | null; circuit: "closed" | "open" | "half_open" | null; consecutive_failures: number; last_error: string | null };
+  queue_available: boolean; embedding_model: string; degraded: boolean; message: string | null;
+}
 export interface ChainVerification {
   valid: boolean; rows: number; head_seq: number | null; head_hash: string | null;
   breaks: { chain_seq: number; audit_id: number; reason: string }[]; verified_at: string;
@@ -186,7 +190,8 @@ export interface AIQualityReport {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  /** `body` keeps machine-readable details, e.g. `existing` on a duplicate ticket (409). */
+  constructor(public status: number, message: string, public body: Record<string, unknown> | null = null) { super(message); }
 }
 
 let accessToken: string | null = null;
@@ -228,13 +233,18 @@ export async function logout(): Promise<void> {
   accessToken = null;
 }
 
+async function readError(res: Response): Promise<ApiError> {
+  let body: Record<string, unknown> | null = null;
+  try { body = await res.json(); } catch { /* not JSON */ }
+  const detail = body?.detail;
+  const message = typeof detail === "string" ? detail
+    : Array.isArray(detail) ? detail.map((d: { msg: string }) => d.msg).join("; ")
+    : `${res.status} ${res.statusText}`;
+  return new ApiError(res.status, message, body);
+}
+
 async function errorMessage(res: Response): Promise<string> {
-  try {
-    const body = await res.json();
-    if (typeof body.detail === "string") return body.detail;
-    if (Array.isArray(body.detail)) return body.detail.map((d: { msg: string }) => d.msg).join("; ");
-  } catch { /* not JSON */ }
-  return `${res.status} ${res.statusText}`;
+  return (await readError(res)).message;
 }
 
 export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -247,7 +257,7 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
     if (user) return api<T>(path, init, false);
     onSessionExpired?.();
   }
-  if (!res.ok) throw new ApiError(res.status, await errorMessage(res));
+  if (!res.ok) throw await readError(res);
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
 

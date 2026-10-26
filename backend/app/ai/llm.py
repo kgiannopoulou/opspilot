@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Protocol
 
@@ -76,12 +79,98 @@ class ClaudeClient:
         return data
 
 
+@dataclass
+class CircuitState:
+    state: str  # "closed" (calls go through) | "open" (failing fast) | "half_open" (one trial call allowed)
+    consecutive_failures: int
+    open_until: float | None
+    last_error: str | None
+
+
+class CircuitBreaker:
+    """Stop calling a provider that keeps failing.
+
+    Without it, every investigation during a provider outage waits for the full timeout (and SDK retries) before
+    falling back. After `threshold` consecutive failures the circuit opens and calls fail immediately with LLMError —
+    callers take their non-LLM path at once. After `cooldown` seconds one trial call is let through (half-open): success
+    closes the circuit, failure opens it again. State is per process (API and each worker decide independently).
+    """
+
+    def __init__(self, threshold: int = 3, cooldown: float = 60.0, clock: Any = time.monotonic) -> None:
+        self.threshold, self.cooldown, self.clock = threshold, cooldown, clock
+        self.failures, self.opened_at, self.last_error = 0, None, None
+        self.lock = threading.Lock()
+
+    def state(self) -> CircuitState:
+        with self.lock:
+            if self.opened_at is None:
+                return CircuitState("closed", self.failures, None, self.last_error)
+            until = self.opened_at + self.cooldown
+            return CircuitState("open" if self.clock() < until else "half_open", self.failures, until, self.last_error)
+
+    def before_call(self) -> None:
+        state = self.state()
+        if state.state == "open":
+            raise LLMError(f"LLM circuit open after {state.consecutive_failures} consecutive failures "
+                           f"(last: {state.last_error}); using the non-LLM path")  # fmt: skip
+        if state.state == "half_open":
+            with self.lock:
+                self.opened_at = self.clock()  # one trial: concurrent callers keep failing fast meanwhile
+
+    def success(self) -> None:
+        with self.lock:
+            self.failures, self.opened_at, self.last_error = 0, None, None
+
+    def failure(self, error: str) -> None:
+        with self.lock:
+            self.failures += 1
+            self.last_error = error
+            if self.failures >= self.threshold:
+                self.opened_at = self.clock()
+
+
+class GuardedLLM:
+    """Any LLMClient behind a circuit breaker. Unexpected exceptions are normalised to LLMError for callers."""
+
+    def __init__(self, client: LLMClient, breaker: CircuitBreaker | None = None) -> None:
+        self.client = client
+        self.breaker = breaker or CircuitBreaker()
+        self.name = client.name
+
+    def complete_json(self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int = 4096) -> dict[str, Any]:
+        self.breaker.before_call()
+        try:
+            data = self.client.complete_json(system, prompt, schema, max_tokens)
+        except LLMError as exc:
+            self.breaker.failure(str(exc))
+            raise
+        except Exception as exc:  # noqa: BLE001 — a timeout or SDK bug must not escape as a 500
+            self.breaker.failure(type(exc).__name__)
+            raise LLMError(f"model call failed: {type(exc).__name__}") from exc
+        self.breaker.success()
+        return data
+
+
 @lru_cache
 def get_llm() -> LLMClient | None:
-    """The configured model, or None: callers then use their deterministic, non-LLM path."""
+    """The configured model behind a circuit breaker, or None: callers then use their deterministic, non-LLM path."""
     settings = get_settings()
     if settings.llm_provider == "none":
         return None
     if settings.llm_provider == "anthropic":
-        return ClaudeClient(settings.llm_model, settings.llm_effort, settings.llm_timeout_seconds)
+        return GuardedLLM(ClaudeClient(settings.llm_model, settings.llm_effort, settings.llm_timeout_seconds))
     raise ValueError(f"unknown LLM provider {settings.llm_provider!r}")
+
+
+def llm_status() -> dict[str, Any]:
+    """For /ai/status: is the model configured, and is its circuit closed?"""
+    settings = get_settings()
+    llm = get_llm()
+    state = llm.breaker.state() if isinstance(llm, GuardedLLM) else None
+    return {
+        "provider": settings.llm_provider,
+        "model": settings.llm_model if llm else None,
+        "circuit": state.state if state else None,
+        "consecutive_failures": state.consecutive_failures if state else 0,
+        "last_error": state.last_error if state else None,
+    }

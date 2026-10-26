@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (20 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (21 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -85,7 +85,7 @@ OPEN ──► TRIAGED ──► INVESTIGATING ──► RESOLVED ──► CLOS
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/tickets?status=&priority=&service=&assignee_id=&unassigned=&q=&page=` | Filtered, paginated queue |
-| `POST` | `/api/v1/tickets` | Create a ticket |
+| `POST` | `/api/v1/tickets` | Create a ticket (`Idempotency-Key` header supported; `409` on a duplicate, `allow_duplicate=true` overrides) |
 | `GET` / `PATCH` | `/api/v1/tickets/{number}` | Read / edit title, description, priority, service, labels |
 | `POST` | `/api/v1/tickets/{number}/transition` | Move through the lifecycle |
 | `POST` | `/api/v1/tickets/{number}/assign` | Assign / unassign |
@@ -601,6 +601,31 @@ docker compose up -d --build
 cd frontend && npx playwright install chromium && npx playwright test
 ```
 
+## Failure testing
+
+OpsPilot is used *during* outages, so its own dependencies failing must not take it down. Each failure mode is a
+test ([`test_failures.py`](backend/tests/test_failures.py)); the full matrix is in [docs/resilience.md](docs/resilience.md).
+
+| Failure | Behaviour |
+|---|---|
+| PostgreSQL unavailable | `503 database_unavailable` + `Retry-After` instead of a stack trace; the worker leaves the message unacknowledged and the job runs once the database is back |
+| Redis unavailable | Login throttle and cache fail open, jobs run in-process; each Redis call costs ≤ 0.5 s (found by this step: with no connect timeout and redis-py's default retries, a two-login test took 34 s) |
+| LLM timeout / outage | Extractive write-up and keyword triage; a **circuit breaker** fails fast after 3 consecutive errors and retries one call after 60 s |
+| LLM returns malformed JSON | Truncated, prose, empty, refusal → `LLMError` → deterministic path; *valid but wrong* drafts are caught by the grounding check |
+| Vector search returns nothing | Investigation completes from logs, metrics, changes and history; "No matching documents" |
+| Worker crashes | `XAUTOCLAIM` hands the message to another worker; finished jobs are never re-run |
+| Duplicate ticket | `Idempotency-Key` replays return the original (`200`), concurrent retries create one ticket; the same open report from the same person within 10 min is `409` with the existing number |
+
+```
+LLM unavailable
+
+AI investigation temporarily unavailable.
+Manual investigation tools remain accessible.
+```
+
+That is exactly what the incident page shows when an investigation fails for good, and `GET /api/v1/ai/status`
+(polled by the page) drives a "degraded mode" banner when the LLM circuit is open or the queue is down.
+
 ## Repository structure
 
 ```
@@ -667,6 +692,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 18 | AI feedback: 👍/👎 with reasons, AI quality report | ✅ |
 | 19 | RAG and AI evaluation: labelled benchmark, generated report, CI regression gate | ✅ |
 | 20 | Testing: unit/integration split, RBAC matrix, coverage gate, Vitest, Playwright E2E | ✅ |
+| 21 | Failure testing: DB/Redis/LLM/vector/worker failures, circuit breaker, idempotent tickets | ✅ |
 
 ## License
 

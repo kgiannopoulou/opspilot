@@ -5,6 +5,8 @@ import logging
 from functools import lru_cache
 
 import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 from app.core.config import get_settings
 
@@ -13,7 +15,15 @@ log = logging.getLogger(__name__)
 
 @lru_cache
 def get_redis() -> redis.Redis:
-    return redis.Redis.from_url(get_settings().redis_url, socket_timeout=0.5, decode_responses=True)
+    """Shared client for request paths. Everything Redis does here fails open, so a dead Redis must cost one short
+    timeout per call — not the OS connect timeout, and not redis-py's default retries multiplying it."""
+    return redis.Redis.from_url(
+        get_settings().redis_url,
+        socket_timeout=0.5,
+        socket_connect_timeout=0.5,
+        retry=Retry(NoBackoff(), 0),
+        decode_responses=True,
+    )
 
 
 class LoginThrottle:

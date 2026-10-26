@@ -1,8 +1,11 @@
-from datetime import UTC, datetime
+import hashlib
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import NotFoundError, ValidationFailed
+from app.core.errors import ConflictError, NotFoundError, ValidationFailed
 from app.models import Ticket, TicketComment, TicketEvent, User
 from app.models.enums import TicketEventType, TicketStatus
 from app.repositories.catalog import ServiceRepository, UserRepository
@@ -10,6 +13,20 @@ from app.repositories.tickets import TicketRepository
 from app.schemas.ticket import CommentCreate, TicketCreate, TicketTransition, TicketUpdate
 from app.services import audit
 from app.services.ticket_workflow import REQUIRES_RESOLUTION, can_transition
+
+DUPLICATE_WINDOW = timedelta(minutes=10)
+OPEN_STATUSES = (TicketStatus.OPEN, TicketStatus.TRIAGED, TicketStatus.INVESTIGATING)
+
+
+def fingerprint(data: TicketCreate) -> str:
+    normalised = "|".join(" ".join(part.lower().split()) for part in (data.title, data.description, data.service or ""))
+    return hashlib.sha256(normalised.encode()).hexdigest()
+
+
+class DuplicateTicket(ConflictError):
+    def __init__(self, existing: Ticket) -> None:
+        super().__init__(f"looks like a duplicate of {existing.number}, created {existing.created_at:%H:%M} UTC; "
+                         "pass allow_duplicate=true to create it anyway", existing=existing.number)  # fmt: skip
 
 
 class TicketService:
@@ -52,21 +69,64 @@ class TicketService:
 
     # -- use cases -----------------------------------------------------------------------------------------------
 
-    def create(self, data: TicketCreate, actor: User) -> Ticket:
-        ticket = self.tickets.add(
-            Ticket(
-                number=self.tickets.next_number(),
-                title=data.title.strip(),
-                description=data.description.strip(),
-                priority=data.priority,
-                source=data.source,
-                labels=sorted(set(data.labels)),
-                service_id=self._service_id(data.service),
-                reporter_id=actor.id,
+    def _by_key(self, actor: User, key: str) -> Ticket | None:
+        return self.db.scalar(select(Ticket).where(Ticket.reporter_id == actor.id, Ticket.idempotency_key == key))
+
+    def create(self, data: TicketCreate, actor: User, allow_duplicate: bool = False) -> Ticket:
+        return self.submit(data, actor, allow_duplicate=allow_duplicate)[0]
+
+    def submit(
+        self, data: TicketCreate, actor: User, idempotency_key: str | None = None, allow_duplicate: bool = False
+    ) -> tuple[Ticket, bool]:
+        """Create a ticket. Returns (ticket, created): a replayed Idempotency-Key returns the original, created=False.
+
+        Without a key, the same open report from the same person within 10 minutes is refused as a duplicate
+        (409 with the existing number) unless allow_duplicate is set — double submits and retry storms do not
+        flood the queue or trigger triage twice.
+        """
+        print_ = fingerprint(data)
+        if idempotency_key:
+            existing = self._by_key(actor, idempotency_key)
+            if existing is not None:
+                if existing.request_fingerprint != print_:
+                    raise ValidationFailed("Idempotency-Key was already used for a different ticket")
+                return existing, False
+        if not allow_duplicate:
+            duplicate = self.db.scalar(
+                select(Ticket)
+                .where(
+                    Ticket.reporter_id == actor.id,
+                    Ticket.request_fingerprint == print_,
+                    Ticket.status.in_(OPEN_STATUSES),
+                    Ticket.created_at >= datetime.now(UTC) - DUPLICATE_WINDOW,
+                )
+                .order_by(Ticket.created_at.desc())
+                .limit(1)
             )
+            if duplicate is not None:
+                raise DuplicateTicket(duplicate)
+        ticket = Ticket(
+            number=self.tickets.next_number(),
+            title=data.title.strip(),
+            description=data.description.strip(),
+            priority=data.priority,
+            source=data.source,
+            labels=sorted(set(data.labels)),
+            service_id=self._service_id(data.service),
+            reporter_id=actor.id,
+            idempotency_key=idempotency_key,
+            request_fingerprint=print_,
         )
-        self._event(ticket, actor, TicketEventType.CREATED, to_value=TicketStatus.OPEN.value)
-        return self._commit(ticket)
+        try:
+            self.tickets.add(ticket)
+            self._event(ticket, actor, TicketEventType.CREATED, to_value=TicketStatus.OPEN.value)
+            return self._commit(ticket), True
+        except IntegrityError:
+            # Two requests with the same key raced past the lookup: the unique constraint picked a winner.
+            self.db.rollback()
+            if idempotency_key and (winner := self._by_key(actor, idempotency_key)) is not None:
+                return winner, False
+            raise
 
     def update(self, number: str, data: TicketUpdate, actor: User) -> Ticket:
         ticket = self.get(number, for_update=True)

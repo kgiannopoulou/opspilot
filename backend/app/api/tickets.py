@@ -1,7 +1,7 @@
 from typing import Annotated
 
 import redis
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.ai.correlation import LogCorrelator
@@ -63,17 +63,34 @@ def list_tickets(
     return Page(items=[to_out(t) for t in items], total=total, page=page, page_size=page_size)
 
 
-@router.post("", response_model=TicketOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=TicketOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={200: {"description": "Idempotent replay: the ticket created earlier with this key"},
+               409: {"description": "Duplicate of an open ticket (`existing` holds its number)"}},
+)  # fmt: skip
 def create_ticket(
     data: TicketCreate,
     db: DB,
     user: Writer,
     background: BackgroundTasks,
     client: Annotated[redis.Redis, Depends(get_redis)],
+    response: Response,
+    idempotency_key: Annotated[str | None, Header(max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$")] = None,
+    allow_duplicate: bool = False,
 ) -> TicketOut:
-    """Responds immediately; AI triage (correlation + classification) runs in a background worker."""
-    ticket = TicketService(db).create(data, user)
-    JobService(db, client).submit("ticket.triage", "ticket", ticket.number, {"ticket_id": ticket.id}, background)
+    """Responds immediately; AI triage (correlation + classification) runs in a background worker.
+
+    Send an `Idempotency-Key` header to make retries safe: the same key returns the original ticket (200) and
+    triage is not queued twice.
+    """
+    ticket, created = TicketService(db).submit(data, user, idempotency_key, allow_duplicate)
+    if created:
+        JobService(db, client).submit("ticket.triage", "ticket", ticket.number, {"ticket_id": ticket.id}, background)
+    else:
+        response.status_code = status.HTTP_200_OK
+        response.headers["Idempotent-Replayed"] = "true"
     return to_out(ticket)
 
 

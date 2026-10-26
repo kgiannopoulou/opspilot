@@ -34,7 +34,7 @@ class TicketRepository:
             stmt = stmt.with_for_update(of=Ticket)
         return self.db.scalar(stmt)
 
-    def _filtered(self, filters: TicketFilters) -> Select[tuple[Ticket]]:
+    def _filtered(self, filters: TicketFilters) -> Select[Ticket]:
         stmt = select(Ticket)
         if filters.status:
             stmt = stmt.where(Ticket.status.in_(filters.status))

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     BigInteger,
@@ -21,6 +21,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 from app.models.enums import EvidenceKind, EvidenceStance, InvestigationStatus, db_enum
 from app.models.user import User
+
+if TYPE_CHECKING:
+    from app.models.incident import Incident
+    from app.models.knowledge import KnowledgeDocument
+    from app.models.queries import InvestigationQuery
 
 
 class AIInvestigation(Base):

@@ -15,6 +15,15 @@ ignore = ["B008"]  # FastAPI's Depends() in argument defaults is idiomatic
 [tool.ruff.lint.isort]
 known-first-party = ["app", "simulator"]
 
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+ignore_missing_imports = true  # sqlglot, pgvector, fastembed ship no stubs
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests", "../simulator/tests"]
 pythonpath = [".", ".."]

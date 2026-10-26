@@ -57,7 +57,7 @@ class ClaudeClient:
     def _create(self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int) -> Any:
         anthropic = self.anthropic
         try:
-            return self.client.beta.messages.create(
+            return self.client.beta.messages.create(  # type: ignore[call-overload]  # beta params ahead of the stubs
                 model=self.model,
                 max_tokens=max_tokens,
                 system=system,
@@ -110,7 +110,9 @@ class CircuitBreaker:
 
     def __init__(self, threshold: int = 3, cooldown: float = 60.0, clock: Any = time.monotonic) -> None:
         self.threshold, self.cooldown, self.clock = threshold, cooldown, clock
-        self.failures, self.opened_at, self.last_error = 0, None, None
+        self.failures = 0
+        self.opened_at: float | None = None
+        self.last_error: str | None = None
         self.lock = threading.Lock()
 
     def state(self) -> CircuitState:

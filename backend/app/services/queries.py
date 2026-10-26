@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Engine, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
@@ -87,7 +87,9 @@ class QueryService:
 
     def _execute(self, run: QueryRun) -> None:
         started = time.perf_counter()
-        with self.db.get_bind().connect() as conn:
+        engine = self.db.get_bind()
+        assert isinstance(engine, Engine)
+        with engine.connect() as conn:
             transaction = conn.begin()
             try:
                 conn.exec_driver_sql("SET TRANSACTION READ ONLY")
@@ -95,7 +97,9 @@ class QueryService:
                 conn.exec_driver_sql("SET LOCAL lock_timeout = 1000")
                 conn.exec_driver_sql(f"SET LOCAL ROLE {READONLY_ROLE}")
                 conn.exec_driver_sql("SET LOCAL search_path = shopstream")
-                cursor = conn.connection.driver_connection.cursor()  # raw cursor: no parameter parsing of the SQL
+                raw = conn.connection.driver_connection
+                assert raw is not None
+                cursor = raw.cursor()  # raw cursor: no parameter parsing of the SQL
                 cursor.execute(run.sql)
                 columns = [c.name for c in cursor.description or []]
                 rows = cursor.fetchmany(MAX_ROWS + 1)

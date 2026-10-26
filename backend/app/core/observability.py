@@ -74,7 +74,8 @@ class StateCollector(Collector):
 
     def __init__(self, session_factory: Any = None, redis_factory: Any = None, ttl: float = 10.0) -> None:
         self.session_factory, self.redis_factory = session_factory, redis_factory
-        self.ttl, self._at, self._cache = ttl, 0.0, []
+        self.ttl, self._at = ttl, 0.0
+        self._cache: list[GaugeMetricFamily] = []
 
     def collect(self) -> Iterable[GaugeMetricFamily]:
         if time.monotonic() - self._at > self.ttl:

@@ -87,7 +87,7 @@ class FeedbackService:
             group = [r for r in rows if (r[1] if key == "engine" else r[2]) is not None]
             out: dict[str, Any] = {}
             for fb, engine, hypothesis, _ in group:
-                name = engine if key == "engine" else hypothesis
+                name = str(engine if key == "engine" else hypothesis)
                 entry = out.setdefault(name, {"useful": 0, "incorrect": 0})
                 entry["useful" if fb.rating == 1 else "incorrect"] += 1
             for entry in out.values():

@@ -68,7 +68,7 @@ def run_job(db: Session, queue: JobQueue | None, job_id: uuid.UUID, worker: str)
         HANDLERS[job.type](db, job, final_attempt)
     except Exception as exc:  # noqa: BLE001 — recorded on the job; retried or dead-lettered
         db.rollback()
-        job = db.get(BackgroundJob, job_id)
+        job = db.get_one(BackgroundJob, job_id)
         job.error = f"{type(exc).__name__}: {exc}"[:2000]
         job.finished_at = datetime.now(UTC)
         if final_attempt:
@@ -77,6 +77,7 @@ def run_job(db: Session, queue: JobQueue | None, job_id: uuid.UUID, worker: str)
                 queue.dead_letter(str(job.id), job.type, job.error)
         else:
             job.status = JobStatus.RETRYING
+            assert queue is not None  # not the final attempt ⇒ there is a queue to retry on
             queue.retry_later(str(job.id), job.type, BACKOFF_SECONDS * 2 ** (job.attempts - 1))
         log.warning("job %s (%s) attempt %s failed: %s", job.id, job.type, job.attempts, job.error)
         db.commit()

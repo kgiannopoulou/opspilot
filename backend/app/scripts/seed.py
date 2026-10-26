@@ -466,7 +466,7 @@ def seed_triage(db: Session, users: dict[str, User]) -> None:
 
 def seed_feedback(db: Session, users: dict[str, User]) -> None:
     """A few 👍/👎 on the pre-run investigations, so the AI quality page has something to show."""
-    votes = {
+    votes: dict[str, list[tuple[str, int, FeedbackReason | None, str | None]]] = {
         "payment_gateway_timeout": [("maria@opspilot.dev", 1, None, None), ("sam@opspilot.dev", 1, None, None)],
         "db_connection_pool_exhaustion": [
             ("alex@opspilot.dev", 1, None, None),
@@ -476,8 +476,8 @@ def seed_feedback(db: Session, users: dict[str, User]) -> None:
     }  # fmt: skip
     service = FeedbackService(db)
     for run in db.scalars(select(AIInvestigation).where(AIInvestigation.hypothesis_key.in_(votes))).unique():
-        incident = db.get(Incident, run.incident_id)
-        for email, rating, reason, comment in votes[run.hypothesis_key]:
+        incident = db.get_one(Incident, run.incident_id)
+        for email, rating, reason, comment in votes[run.hypothesis_key or ""]:
             service.submit(incident, run, users[email], rating, reason, comment)
 
 

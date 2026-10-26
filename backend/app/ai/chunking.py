@@ -30,7 +30,9 @@ def count_tokens(text: str) -> int:
 
 
 def _split_long(body: str) -> list[str]:
-    parts, current, words = [], [], 0
+    parts: list[str] = []
+    current: list[str] = []
+    words = 0
     for para in [p for p in re.split(r"\n\s*\n", body) if p.strip()]:
         n = len(para.split())
         if current and words + n > MAX_WORDS:

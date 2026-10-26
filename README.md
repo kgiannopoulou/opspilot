@@ -10,6 +10,11 @@
 
 `FastAPI` · `Next.js` · `PostgreSQL` · `Redis` · `pgvector` · `Docker` · `GitHub Actions`
 
+[![CI](https://github.com/kgiannopoulou/opspilot/actions/workflows/ci.yml/badge.svg)](https://github.com/kgiannopoulou/opspilot/actions/workflows/ci.yml)
+![Backend tests](https://img.shields.io/badge/backend%20tests-241%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
+![Docker](https://img.shields.io/badge/docker%20compose-build%20%E2%9C%93-2496ED?logo=docker&logoColor=white)
+
 </div>
 
 ---
@@ -18,7 +23,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (23 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (24 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -593,7 +598,7 @@ cd backend && python -m app.eval.run --note "what changed"   # rebuilds docs/eva
 | Frontend unit + component | Formatting, API client token refresh/retry, activity timeline, feedback widget | 12 | Vitest + Testing Library (`npm test`) |
 | **End-to-end** | Login → declare incident → AI investigation runs in the worker → review evidence → 👍 → resolve → audit trail shows it; viewer cannot act | 2 | Playwright against `docker compose` |
 
-Backend total: **210 tests, 94 % line coverage** (`pytest --cov`; CI fails under 90 %). The E2E test drives the real
+Backend total: **241 tests, 95 % line coverage** (`pytest --cov`; CI fails under 90 %). The E2E test drives the real
 stack — Next.js proxy, FastAPI, Redis Streams, the worker and PostgreSQL — not mocks:
 
 ```bash
@@ -658,6 +663,37 @@ operations; [JSON](infrastructure/observability/grafana/dashboards/opspilot.json
 [alert rules](infrastructure/observability/alerts.yml): 5xx rate, p95 latency, dependency down, queue backlog, dead
 letters, LLM circuit open, and LLM drafts failing the grounding check — the AI-specific alert most dashboards lack.
 
+## CI/CD
+
+Every pull request and every push to `main` runs [one pipeline](.github/workflows/ci.yml). Each stage starts only
+when the stages it depends on are green, so a lint error fails in seconds instead of after the integration suite:
+
+```
+Pull request
+   ├─► Backend lint (ruff check + ruff format)  ┐
+   └─► Frontend lint (ESLint, next/core-web-vitals + typescript, 0 warnings)
+                                                 ├─► Type checking (mypy over app/ · tsc --noEmit)
+                                                 │      ├─► Backend unit tests (no services) ─► Integration tests (PostgreSQL + Redis, coverage ≥ 90 %)
+                                                 │      └─► Frontend unit + component tests (Vitest)
+                                                 └─► Security scan (Bandit SAST · pip-audit · npm audit)
+                                                                    └─► Docker build (docker compose build) ─► E2E (Playwright against the stack)
+```
+
+| Stage | Tool | Fails the build when |
+|---|---|---|
+| Backend lint | `ruff check`, `ruff format --check` | any lint finding or unformatted file (annotations inline on the PR) |
+| Frontend lint | ESLint 9 with `eslint-config-next` | any error **or warning** (`--max-warnings=0`) |
+| Type checking | `mypy` (`check_untyped_defs`, `no_implicit_optional`), `tsc --noEmit` | any type error |
+| Unit tests | `pytest -m unit`, Vitest | any failure |
+| Integration tests | `pytest` against PostgreSQL 16 + pgvector and Redis service containers | any failure, or line coverage under 90 % (the number is written to the job summary) |
+| Security scan | Bandit (`-ll`), `pip-audit --strict`, `npm audit --omit=dev --audit-level=moderate` | a medium+ SAST finding or a known CVE in a runtime dependency |
+| Docker build | `docker compose build` | an image does not build |
+| E2E | Playwright against `docker compose up --wait` | the user journey breaks; the report and container logs are uploaded |
+
+Results at the time of writing (genuine, from the latest local and CI runs): **241 backend tests passing, 95 %
+line coverage**, 13 frontend tests, 2 E2E journeys, mypy clean over 96 modules, ESLint clean, Bandit: 0 medium/high
+findings, pip-audit / npm audit: 0 known vulnerabilities.
+
 ## Repository structure
 
 ```
@@ -680,7 +716,7 @@ opspilot/
 ├── knowledge-base/      runbooks/, troubleshooting/, architecture/, process/
 ├── infrastructure/      docker/ (Dockerfiles), observability/ (Prometheus, alerts, Grafana), terraform/ (planned)
 ├── docs/                architecture/, decisions/, evaluation/, screenshots/
-├── .github/workflows/   CI: lint, unit + integration tests with coverage, frontend tests + build, Docker, E2E
+├── .github/workflows/   CI: lint → type check → unit → integration (coverage) → security scan → Docker → E2E
 ├── docker-compose.yml
 ├── .env.example
 ├── CONTRIBUTING.md
@@ -752,6 +788,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 21 | Failure testing: DB/Redis/LLM/vector/worker failures, circuit breaker, idempotent tickets | ✅ |
 | 22 | Observability: /health, /ready, /metrics, request ids, JSON logs, Prometheus alerts, Grafana dashboard | ✅ |
 | 23 | Docker: one-command start, readiness-ordered startup, hardened containers | ✅ |
+| 24 | CI/CD: staged pipeline — lint → type check → unit → integration → security scan → Docker → E2E | ✅ |
 
 ## License
 

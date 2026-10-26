@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from typing import Any
 
 import redis
 
@@ -47,7 +48,9 @@ class JobQueue:
                 raise
 
     def enqueue(self, job_id: str, type_: str) -> str:
-        return self.client.xadd(STREAM, {"job_id": job_id, "type": type_}, maxlen=MAX_STREAM_LENGTH, approximate=True)
+        return str(
+            self.client.xadd(STREAM, {"job_id": job_id, "type": type_}, maxlen=MAX_STREAM_LENGTH, approximate=True)
+        )
 
     def retry_later(self, job_id: str, type_: str, delay_seconds: float) -> None:
         self.client.zadd(DELAYED, {json.dumps({"job_id": job_id, "type": type_}): time.time() + delay_seconds})
@@ -55,7 +58,8 @@ class JobQueue:
     def promote_due(self) -> int:
         """Move retries whose backoff has elapsed back onto the stream."""
         moved = 0
-        for raw in self.client.zrangebyscore(DELAYED, "-inf", time.time()):
+        due: list[str] = self.client.zrangebyscore(DELAYED, "-inf", time.time())  # type: ignore[assignment]
+        for raw in due:
             if self.client.zrem(DELAYED, raw):  # only the worker that removed it re-enqueues it
                 item = json.loads(raw)
                 self.enqueue(item["job_id"], item["type"])
@@ -64,7 +68,7 @@ class JobQueue:
 
     def read(self, consumer: str, count: int = 1, block_ms: int | None = None) -> list[Message]:
         self.ensure_group()
-        response = self.client.xreadgroup(GROUP, consumer, {STREAM: ">"}, count=count, block=block_ms)
+        response: Any = self.client.xreadgroup(GROUP, consumer, {STREAM: ">"}, count=count, block=block_ms)
         return [Message(mid, f["job_id"], f["type"]) for _, entries in response or [] for mid, f in entries]
 
     def reclaim_stale(self, consumer: str, min_idle_ms: int = STALE_AFTER_MS) -> list[Message]:

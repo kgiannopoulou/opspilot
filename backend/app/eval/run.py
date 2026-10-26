@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine, make_url, text
+from sqlalchemy import Table, create_engine, make_url, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai.classifier import get_classifier
@@ -162,7 +162,8 @@ def run_retrieval(db: Session, cases: list[dict[str, Any]] | None = None) -> dic
 def _clear_telemetry(db: Session) -> None:
     from app.models import shop_orders, shop_password_resets, shop_payments
 
-    tables = [ApplicationLog.__table__, MetricSample.__table__, shop_orders, shop_payments, shop_password_resets]
+    candidates = [ApplicationLog.__table__, MetricSample.__table__, shop_orders, shop_payments, shop_password_resets]
+    tables = [t for t in candidates if isinstance(t, Table)]
     names = ", ".join(f'"{t.schema}"."{t.name}"' if t.schema else f'"{t.name}"' for t in tables)
     db.execute(text(f"TRUNCATE {names}"))
     db.commit()

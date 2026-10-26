@@ -8,7 +8,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, or_, select, text
@@ -183,7 +183,7 @@ class AuditService:
             head_seq=head[0] if head else None,
             head_hash=head[1] if head else None,
             breaks=breaks,
-            verified_at=self.db.scalar(select(func.now())),
+            verified_at=self.db.scalar(select(func.now())) or datetime.now(UTC),
         )
 
 

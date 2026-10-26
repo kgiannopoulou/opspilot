@@ -77,6 +77,8 @@ class QueryPlanner:
         return proposals
 
     def _from_llm(self, incident: Incident, result: InvestigationResult, existing: list[Proposal]) -> list[Proposal]:
+        llm = self.llm
+        assert llm is not None
         evidence = "\n".join(f"- [{e.ref}] {e.summary}" for e in result.evidence if e.ref)
         proposed = "\n\n".join(f"-- {p.title}\n{p.sql}" for p in existing) or "(none)"
         prompt = (
@@ -86,14 +88,12 @@ class QueryPlanner:
             f"SUSPECTED ROOT CAUSE: {result.root_cause}\n\nEVIDENCE:\n{evidence}\n\nALREADY PROPOSED:\n{proposed}"
         )
         try:
-            data = self.llm.complete_json(SYSTEM_PROMPT, prompt, QUERIES_SCHEMA, max_tokens=4096)
+            data = llm.complete_json(SYSTEM_PROMPT, prompt, QUERIES_SCHEMA, max_tokens=4096)
         except LLMError as exc:
             log.warning("LLM query proposals unavailable for %s: %s", incident.number, exc)
             return []
         queries = [q for q in data.get("queries", []) if q.get("sql", "").strip()][:MAX_LLM_QUERIES]
         return [
-            Proposal(
-                q["title"].strip()[:200], q["purpose"].strip(), q["sql"].strip(), self.llm.name, validate(q["sql"])
-            )
+            Proposal(q["title"].strip()[:200], q["purpose"].strip(), q["sql"].strip(), llm.name, validate(q["sql"]))
             for q in queries
         ]

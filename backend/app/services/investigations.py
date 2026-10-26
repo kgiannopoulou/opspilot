@@ -118,7 +118,7 @@ class InvestigationService:
         """Run the pipeline for a QUEUED (or retried) investigation. Completed runs are left alone (idempotent)."""
         if run.status == InvestigationStatus.COMPLETED:
             return run
-        incident = self.db.get(Incident, run.incident_id)
+        incident = self.db.get_one(Incident, run.incident_id)
         started = time.perf_counter()
         run.status, run.started_at, run.error = InvestigationStatus.RUNNING, datetime.now(UTC), None
         run.attempts = (run.attempts or 0) + 1
@@ -217,7 +217,7 @@ class InvestigationService:
         run.duration_ms = round((time.perf_counter() - started) * 1000)
         if final_attempt:
             run.status, run.completed_at = InvestigationStatus.FAILED, datetime.now(UTC)
-            incident = self.db.get(Incident, run.incident_id)
+            incident = self.db.get_one(Incident, run.incident_id)
             audit.record(self.db, None, "incident.investigation_failed", "incident", incident.number,
                          {"investigation_id": run.id, "error": type(exc).__name__})  # fmt: skip
         else:

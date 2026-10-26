@@ -38,9 +38,9 @@ class ClassificationService:
             service = KeywordClassifier(self.db).classify(ticket.title, ticket.description).service
         correlation = LogCorrelator(self.db).correlate(ticket, service)
         prediction = classifier.classify(ticket.title, ticket.description, correlation)
-        service = None
+        predicted: Service | None = None
         if prediction.service:
-            service = self.db.scalar(select(Service).where(Service.name == prediction.service))
+            predicted = self.db.scalar(select(Service).where(Service.name == prediction.service))
         # A newer suggestion supersedes any earlier one still waiting for review.
         for stale in self.db.scalars(
             select(TicketClassification).where(
@@ -54,7 +54,7 @@ class ClassificationService:
             engine=prediction.engine,
             category=prediction.category,
             priority=prediction.priority,
-            service_id=service.id if service else None,
+            service_id=predicted.id if predicted else None,
             confidence=prediction.confidence,
             rationale=prediction.rationale,
             signals=prediction.signals,

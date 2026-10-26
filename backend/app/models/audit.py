@@ -1,11 +1,14 @@
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class AuditEvent(Base):
@@ -38,4 +41,4 @@ class AuditEvent(Base):
     prev_hash: Mapped[str | None] = mapped_column(String(64))
     hash: Mapped[str | None] = mapped_column(String(64))
 
-    actor: Mapped["User | None"] = relationship(lazy="joined")  # noqa: F821
+    actor: Mapped["User | None"] = relationship(lazy="joined")

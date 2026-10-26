@@ -240,7 +240,7 @@ def incident_telemetry(number: str, db: DB, _: Reader) -> IncidentTelemetry:
 def incident_logs(number: str, db: DB, _: Reader, limit: int = Query(default=50, ge=1, le=200)) -> list[LogLine]:
     """Most recent WARN/ERROR lines from the affected services since the incident started."""
     incident = IncidentService(db).get(number)
-    _, end = _window(db, incident)
+    end = _window(db, incident)[1]
     ids = [s.id for s in incident.affected_services]
     events = EvidenceRepository(db).recent_problem_logs(ids, incident.started_at, end + timedelta(seconds=1), limit)
     return [

@@ -151,8 +151,8 @@ class KeywordClassifier:
                       for s in (correlation.anomalous if correlation else [])}  # fmt: skip
         observed = max(new_errors, key=lambda svc: (new_errors[svc], svc)) if any(new_errors.values()) else None
         kb_service, kb_source = self._kb_service(text) if not (mentioned or hinted or observed) else (None, None)
-        service = (mentioned or CATEGORY_SERVICE.get(category) or hinted or CATEGORY_SERVICE.get(area) or observed
-                   or kb_service)  # fmt: skip
+        secondary = CATEGORY_SERVICE.get(area) if area else None
+        service = mentioned or CATEGORY_SERVICE.get(category) or hinted or secondary or observed or kb_service
         service_source = (
             "named in the ticket" if mentioned else
             "category default" if CATEGORY_SERVICE.get(category) == service else

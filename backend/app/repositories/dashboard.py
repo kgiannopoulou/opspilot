@@ -83,7 +83,7 @@ class DashboardRepository:
     def service_health(self, window: timedelta = timedelta(hours=6), bucket_minutes: int = 5) -> list[dict[str, Any]]:
         latest_ts = self.db.scalar(select(func.max(MetricSample.ts)))
         services = self.db.scalars(select(Service).order_by(Service.tier, Service.name)).all()
-        active = dict(
+        active: dict[int, int] = dict(
             self.db.execute(
                 select(incident_services.c.service_id, func.count())
                 .join(Incident, Incident.id == incident_services.c.incident_id)

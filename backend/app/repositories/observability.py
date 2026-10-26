@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from typing import Any
 
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from app.models import ApplicationLog, MetricSample, shop_orders, shop_password_resets, shop_payments
@@ -22,7 +23,7 @@ def bulk_insert_logs(db: Session, records: Iterable[LogRecord], service_ids: dic
     ]
     if rows:
         # Core insert (not ORM bulk): one multi-row INSERT per batch instead of per-row statements.
-        db.execute(ApplicationLog.__table__.insert(), rows)
+        db.execute(insert(ApplicationLog), rows)
     return len(rows)
 
 
@@ -32,7 +33,7 @@ def bulk_insert_metrics(db: Session, samples: Iterable[SimMetric], service_ids: 
         for m in samples
     ]
     if rows:
-        db.execute(MetricSample.__table__.insert(), rows)
+        db.execute(insert(MetricSample), rows)
     return len(rows)
 
 

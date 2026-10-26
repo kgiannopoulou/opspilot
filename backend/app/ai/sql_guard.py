@@ -45,7 +45,7 @@ class Verdict:
     tables: list[str] = field(default_factory=list)
 
 
-def _function_name(node: exp.Expression) -> str:
+def _function_name(node: exp.Expr) -> str:
     if isinstance(node, exp.Anonymous):
         return str(node.name).lower()
     return (node.sql_name() if hasattr(node, "sql_name") else type(node).__name__).lower()
@@ -103,7 +103,7 @@ def validate(sql: str) -> Verdict:
     if isinstance(tree, exp.Select) and (value is None or not value.is_int or int(value.name) > MAX_ROWS):
         tree = tree.limit(MAX_ROWS, copy=True)
     elif not isinstance(tree, exp.Select):
-        tree = exp.select("*").from_(tree.subquery("q")).limit(MAX_ROWS)
+        tree = exp.select("*").from_(tree.subquery("q")).limit(MAX_ROWS)  # type: ignore[attr-defined]  # a set operation (UNION …)
     verdict.safe_sql = tree.sql(dialect="postgres", pretty=True)
     verdict.ok = True
     return verdict

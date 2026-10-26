@@ -257,6 +257,8 @@ def describe(event: AuditEvent) -> str:
         case "ai.feedback_submitted":
             verdict = "useful" if c.get("rating") == 1 else f"incorrect ({c.get('reason')})"
             return f"{who} rated investigation #{c.get('investigation_id')} {verdict}"
+        case "ai.feedback_withdrawn":
+            return f"{who} withdrew their rating of investigation #{c.get('investigation_id')}"
         case "auth.login_succeeded":
             return f"{who} signed in"
         case "auth.login_failed":

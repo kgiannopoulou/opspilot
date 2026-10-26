@@ -11,7 +11,7 @@ const NAV = [
   { href: "/tickets", label: "Tickets", icon: "☰" },
   { href: "/services", label: "Services", icon: "◎" },
   { href: "/knowledge", label: "Knowledge", icon: "❏" },
-  { href: null, label: "Analytics", icon: "◔" },
+  { href: "/ai-quality", label: "AI quality", icon: "◔" },
   { href: "/admin", label: "Admin", icon: "⚙", permission: "users:manage" },
   { href: "/audit", label: "Audit log", icon: "⛬", permission: "audit:read" },
 ] as const;
@@ -45,14 +45,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="flex flex-1 flex-col gap-0.5 px-3">
           {NAV.map((item) => {
             if ("permission" in item && !can(item.permission)) return null;
-            if (!item.href) {
-              return (
-                <span key={item.label} className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-600" title="Coming soon">
-                  <span className="w-4 text-center">{item.icon}</span>{item.label}
-                  <span className="ml-auto rounded bg-slate-800 px-1.5 text-[10px] uppercase text-slate-500">soon</span>
-                </span>
-              );
-            }
             return (
               <Link key={item.label} href={item.href}
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
@@ -69,8 +61,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-800 bg-[#0b1120]/90 px-4 backdrop-blur md:px-6">
           <nav className="flex gap-3 text-sm md:hidden">
-            {NAV.filter((n) => n.href && !("permission" in n && !can(n.permission))).map((n) => (
-              <Link key={n.label} href={n.href!} className={active(n.href!) ? "text-sky-300" : "text-slate-400"}>{n.label}</Link>
+            {NAV.filter((n) => !("permission" in n && !can(n.permission))).map((n) => (
+              <Link key={n.label} href={n.href} className={active(n.href) ? "text-sky-300" : "text-slate-400"}>{n.label}</Link>
             ))}
           </nav>
           <div className="hidden text-sm text-slate-500 md:block">Application Support &amp; Incident Intelligence</div>

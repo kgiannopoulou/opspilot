@@ -13,6 +13,7 @@ class Permission(StrEnum):
     USERS_MANAGE = "users:manage"
     SERVICES_MANAGE = "services:manage"
     AUDIT_READ = "audit:read"
+    AI_FEEDBACK = "ai:feedback"  # rate AI investigations (👍 / 👎)
 
 
 class RoleName(StrEnum):
@@ -26,8 +27,10 @@ _READ = {Permission.TICKETS_READ, Permission.INCIDENTS_READ, Permission.DASHBOAR
 
 ROLE_PERMISSIONS: dict[RoleName, frozenset[Permission]] = {
     RoleName.VIEWER: frozenset(_READ),
-    RoleName.SUPPORT_AGENT: frozenset(_READ | {Permission.TICKETS_WRITE}),
-    RoleName.ENGINEER: frozenset(_READ | {Permission.TICKETS_WRITE, Permission.INCIDENTS_INVESTIGATE}),
+    RoleName.SUPPORT_AGENT: frozenset(_READ | {Permission.TICKETS_WRITE, Permission.AI_FEEDBACK}),
+    RoleName.ENGINEER: frozenset(
+        _READ | {Permission.TICKETS_WRITE, Permission.INCIDENTS_INVESTIGATE, Permission.AI_FEEDBACK}
+    ),
     RoleName.ADMIN: frozenset(Permission),
 }
 

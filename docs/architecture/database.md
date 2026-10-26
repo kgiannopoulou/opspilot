@@ -173,7 +173,7 @@ erDiagram
 | Catalogue | `services`, `service_dependencies` | Dependency graph used to check upstream/downstream health during investigations. |
 | Observability | `application_logs`, `metric_samples` | Samples of platform telemetry, produced by the simulator. |
 | Knowledge | `knowledge_documents`, `document_chunks` | Runbooks and guides; chunks carry `vector(384)` embeddings for RAG. |
-| AI | `ai_investigations`, `ai_evidence` | Every conclusion is stored with the evidence rows behind it. |
+| AI | `ai_investigations`, `ai_evidence`, `ai_feedback` | Every conclusion is stored with the evidence rows behind it, and with what analysts thought of it. |
 | Compliance | `audit_events` | Who did what to which entity; written in the same transaction as the change. Hash-chained and append-only (triggers, migration 0009). |
 
 ## Integrity rules enforced by the database

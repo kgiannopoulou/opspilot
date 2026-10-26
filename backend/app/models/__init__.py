@@ -3,6 +3,7 @@
 from app.models.audit import AuditEvent
 from app.models.base import Base
 from app.models.classification import TicketClassification
+from app.models.feedback import AIFeedback
 from app.models.incident import Incident, IncidentTicket, incident_services
 from app.models.investigation import AIEvidence, AIInvestigation
 from app.models.job import BackgroundJob
@@ -15,6 +16,7 @@ from app.models.user import RefreshToken, Role, User
 
 __all__ = [
     "AIEvidence",
+    "AIFeedback",
     "AIInvestigation",
     "ApplicationLog",
     "AuditEvent",

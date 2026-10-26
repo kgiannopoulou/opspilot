@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (17 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (18 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -156,6 +156,7 @@ are written to `audit_events`.
 | `tickets:write` — create/update/comment/assign | | ✅ | ✅ | ✅ |
 | `incidents:investigate` — run investigations, link tickets | | | ✅ | ✅ |
 | `users:manage` — `POST/PATCH/DELETE /users` | | | | ✅ |
+| `ai:feedback` — rate AI investigations | | ✅ | ✅ | ✅ |
 | `services:manage`, `audit:read` | | | | ✅ |
 
 `DELETE /api/v1/users/{id}` requires **admin**; it is a soft delete (history keeps its references) that also
@@ -510,6 +511,37 @@ WORM storage) is the answer to that, and is noted in the threat model.
 | `GET` | `/api/v1/audit/verify` | Verify the hash chain |
 | `GET` | `/api/v1/audit/export.csv` | Archive the trail with hashes, in chain order |
 
+## AI feedback
+
+Under every investigation: **Was this investigation useful? 👍 Useful · 👎 Incorrect**. A 👎 asks *why*, because
+each reason points at a different part of the pipeline:
+
+| Reason | Part to fix |
+|---|---|
+| Wrong root cause | hypothesis scoring |
+| Missed important evidence | evidence collectors / correlation window |
+| Irrelevant documentation | retrieval |
+| Steps not helpful | templates / writer |
+| Query wrong or not useful | query planner |
+| Claim not backed by evidence | grounding check |
+
+Stored in `ai_feedback` (`investigation_id`, `user_id`, `rating`, `reason`, `comment`, timestamps): one verdict per
+person per investigation (`UNIQUE`), changeable, `CHECK (rating IN (-1, 1))` and `CHECK (rating = 1 OR reason IS NOT
+NULL)` — an unexplained 👎 cannot be stored. Only completed runs can be rated (409), every vote is audited, and rating
+needs the new `ai:feedback` permission (support agents, engineers, admins; viewers see the counts).
+
+The **AI quality** page (`GET /api/v1/ai/quality`) puts the feedback loops side by side: useful-rate overall, by
+engine version and by diagnosis, reasons for 👎 with the latest comments, how many write-ups passed the grounding check
+and how many LLM drafts it rejected, and the triage-suggestion acceptance rate from human review (Step 13). Feedback
+is what production says; the offline benchmark (next step) is what a change is tested against before it ships.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/incidents/{n}/investigations/{id}/feedback` | Your verdict and everyone's counts |
+| `PUT` | `/api/v1/incidents/{n}/investigations/{id}/feedback` | `{"rating": 1}` or `{"rating": -1, "reason": "MISSING_EVIDENCE", "comment": "…"}` |
+| `DELETE` | `/api/v1/incidents/{n}/investigations/{id}/feedback` | Withdraw your verdict |
+| `GET` | `/api/v1/ai/quality` | AI quality report |
+
 ## Repository structure
 
 ```
@@ -572,6 +604,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 15 | AI-generated investigation queries with a SQL safety layer | ✅ |
 | 16 | Redis background workers: async triage and investigations with live progress | ✅ |
 | 17 | Audit trail: activity timeline, tamper-evident hash chain, admin audit log | ✅ |
+| 18 | AI feedback: 👍/👎 with reasons, AI quality report | ✅ |
 
 ## License
 

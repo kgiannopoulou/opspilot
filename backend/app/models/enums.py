@@ -119,6 +119,18 @@ class EvidenceKind(StrEnum):
     CHANGE_EVENT = "CHANGE_EVENT"
 
 
+class FeedbackReason(StrEnum):
+    """Why an analyst marked an investigation incorrect — each maps to a different part of the pipeline to fix."""
+
+    WRONG_ROOT_CAUSE = "WRONG_ROOT_CAUSE"  # hypothesis scoring
+    MISSING_EVIDENCE = "MISSING_EVIDENCE"  # evidence collectors / correlation window
+    IRRELEVANT_DOCUMENTS = "IRRELEVANT_DOCUMENTS"  # retrieval
+    UNHELPFUL_STEPS = "UNHELPFUL_STEPS"  # templates / writer
+    WRONG_QUERY = "WRONG_QUERY"  # query planner
+    UNSUPPORTED_CLAIM = "UNSUPPORTED_CLAIM"  # grounding (a claim the evidence does not back)
+    OTHER = "OTHER"
+
+
 class EvidenceStance(StrEnum):
     SUPPORTS = "SUPPORTS"
     CONTRADICTS = "CONTRADICTS"

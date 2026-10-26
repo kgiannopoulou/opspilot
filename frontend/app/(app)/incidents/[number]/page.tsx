@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { IncidentSeries } from "@/components/charts";
+import { InvestigationFeedback } from "@/components/InvestigationFeedback";
 import { InvestigationProgress } from "@/components/InvestigationProgress";
 import { InvestigationQueries } from "@/components/InvestigationQueries";
 import {
@@ -139,8 +140,8 @@ function EvidenceRow({ e }: { e: Evidence }) {
   );
 }
 
-function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRun, onAccept }: {
-  incidentNumber: string; inv: Investigation | null; canInvestigate: boolean; running: boolean; onRun: () => void;
+function InvestigationPanel({ incidentNumber, inv, canInvestigate, canRate, running, onRun, onAccept }: {
+  incidentNumber: string; inv: Investigation | null; canInvestigate: boolean; canRate: boolean; running: boolean; onRun: () => void;
   onAccept: (rootCause: string, investigationId: number) => void;
 }) {
   const runButton = canInvestigate && (
@@ -258,6 +259,8 @@ function InvestigationPanel({ incidentNumber, inv, canInvestigate, running, onRu
 
       <InvestigationQueries incident={incidentNumber} investigationId={inv.id} queries={inv.queries} canRun={canInvestigate} />
 
+      <InvestigationFeedback key={inv.id} incident={incidentNumber} investigationId={inv.id} canRate={canRate} />
+
       <div className="mt-5 border-t border-slate-800 pt-3 text-[11px] text-slate-500">
         Engine <span className="font-mono">{inv.engine}</span> · window {utcTime(inv.window_start)}–{utcTime(inv.window_end)} ·
         {" "}ran {relativeTime(inv.created_at)}{inv.requested_by ? ` by ${inv.requested_by.full_name}` : ""} · {inv.duration_ms} ms ·
@@ -369,7 +372,7 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-5">
-          <InvestigationPanel incidentNumber={i.number} inv={inv} canInvestigate={canInvestigate} running={running} onRun={runInvestigation}
+          <InvestigationPanel incidentNumber={i.number} inv={inv} canInvestigate={canInvestigate} canRate={can("ai:feedback")} running={running} onRun={runInvestigation}
             onAccept={(rc, id) => changeStatus("IDENTIFIED", rc, id)} />
 
           <Card title="Telemetry · affected services">

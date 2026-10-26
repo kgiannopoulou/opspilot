@@ -26,13 +26,33 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
-from app.models import AuditEvent, Base, Incident, IncidentTicket, Role, Service, Ticket, TicketEvent, User
-from app.models.enums import IncidentStatus, Priority, Severity, TicketCategory, TicketSource, TicketStatus
+from app.models import (
+    AIInvestigation,
+    AuditEvent,
+    Base,
+    Incident,
+    IncidentTicket,
+    Role,
+    Service,
+    Ticket,
+    TicketEvent,
+    User,
+)
+from app.models.enums import (
+    FeedbackReason,
+    IncidentStatus,
+    Priority,
+    Severity,
+    TicketCategory,
+    TicketSource,
+    TicketStatus,
+)
 from app.repositories.observability import bulk_insert_app_data, bulk_insert_logs, bulk_insert_metrics
 from app.repositories.tickets import TicketRepository
 from app.schemas.ticket import CommentCreate, TicketCreate, TicketTransition
 from app.services import audit
 from app.services.classification import ClassificationService
+from app.services.feedback import FeedbackService
 from app.services.incidents import IncidentService
 from app.services.investigations import InvestigationService
 from app.services.knowledge import load_knowledge_base
@@ -397,6 +417,7 @@ def seed(db: Session, now: datetime | None = None) -> None:
     seed_live(db, now, users, services)
     seed_backlog(db, users)
     seed_triage(db, users)
+    seed_feedback(db, users)
     with audit.maintenance(db):
         audit.rechain(db)  # backdated rows get their hashes recomputed: the chain verifies from a clean seed
         db.commit()
@@ -441,6 +462,23 @@ def seed_triage(db: Session, users: dict[str, User]) -> None:
         elif ticket.title.startswith("MFA code"):
             classifier.review(ticket, suggestion.id, "modify", sam, category=TicketCategory.NOTIFICATIONS,
                               priority=Priority.P3, note="Single relay, a few merchants: P3")  # fmt: skip
+
+
+def seed_feedback(db: Session, users: dict[str, User]) -> None:
+    """A few 👍/👎 on the pre-run investigations, so the AI quality page has something to show."""
+    votes = {
+        "payment_gateway_timeout": [("maria@opspilot.dev", 1, None, None), ("sam@opspilot.dev", 1, None, None)],
+        "db_connection_pool_exhaustion": [
+            ("alex@opspilot.dev", 1, None, None),
+            ("nikos@opspilot.dev", -1, FeedbackReason.UNHELPFUL_STEPS,
+             "Right cause, but step 1 should be pausing the revenue-report job, not inspecting the pool."),
+        ],
+    }  # fmt: skip
+    service = FeedbackService(db)
+    for run in db.scalars(select(AIInvestigation).where(AIInvestigation.hypothesis_key.in_(votes))).unique():
+        incident = db.get(Incident, run.incident_id)
+        for email, rating, reason, comment in votes[run.hypothesis_key]:
+            service.submit(incident, run, users[email], rating, reason, comment)
 
 
 def main() -> None:

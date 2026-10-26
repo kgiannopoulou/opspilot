@@ -167,6 +167,24 @@ export interface ChainVerification {
   breaks: { chain_seq: number; audit_id: number; reason: string }[]; verified_at: string;
 }
 
+export type FeedbackReason =
+  | "WRONG_ROOT_CAUSE" | "MISSING_EVIDENCE" | "IRRELEVANT_DOCUMENTS" | "UNHELPFUL_STEPS" | "WRONG_QUERY" | "UNSUPPORTED_CLAIM" | "OTHER";
+export interface Feedback {
+  id: number; investigation_id: number; rating: 1 | -1; reason: FeedbackReason | null; comment: string | null; user: UserRef;
+  created_at: string; updated_at: string;
+}
+export interface FeedbackSummary { mine: Feedback | null; useful: number; incorrect: number; reasons: Record<string, number> }
+type RateRow = { useful: number; incorrect: number; useful_rate: number };
+export interface AIQualityReport {
+  investigations: {
+    completed: number; failed: number; rated: number; votes: number; useful: number; incorrect: number; useful_rate: number | null;
+    reasons: Record<string, number>; by_engine: Record<string, RateRow>; by_hypothesis: Record<string, RateRow>;
+    grounding_passed: number; llm_drafts: number; llm_drafts_rejected: number;
+  };
+  triage: { total: number; by_status: Record<string, number>; acceptance_rate: number | null; corrections: Record<string, number> };
+  recent_negative: { incident: string; investigation_id: number; hypothesis: string | null; reason: string | null; comment: string | null; user: string; at: string }[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }

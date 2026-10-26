@@ -17,6 +17,7 @@ from app.repositories.evidence import EvidenceRepository
 from app.schemas.audit import ActivityItem
 from app.schemas.common import Page
 from app.schemas.correlation import LinkTicket
+from app.schemas.feedback import FeedbackIn, FeedbackOut, FeedbackSummary
 from app.schemas.incident import (
     IncidentDetail,
     IncidentStatusChange,
@@ -30,6 +31,7 @@ from app.schemas.incident import (
 )
 from app.schemas.queries import QueryRunOut, RunQuery
 from app.services.audit import AuditService
+from app.services.feedback import FeedbackService
 from app.services.incidents import IncidentService, allowed_incident_transitions
 from app.services.investigations import InvestigationService
 from app.services.queries import QueryService
@@ -40,6 +42,7 @@ router = APIRouter(prefix="/incidents", tags=["incidents"])
 DB = Annotated[Session, Depends(get_db)]
 Reader = Annotated[User, Depends(require(Permission.INCIDENTS_READ))]
 Investigator = Annotated[User, Depends(require(Permission.INCIDENTS_INVESTIGATE))]
+Rater = Annotated[User, Depends(require(Permission.AI_FEEDBACK))]
 
 TELEMETRY_METRICS = ["api_latency_p95_ms", "error_rate", "query_latency_p95_ms", "database_connections"]
 TELEMETRY_LEAD = timedelta(minutes=60)  # show the hour before onset so the change is visible
@@ -150,6 +153,29 @@ def run_investigation(
 def get_investigation(number: str, investigation_id: int, db: DB, _: Reader) -> InvestigationOut:
     incident = IncidentService(db).get(number)
     return InvestigationOut.model_validate(InvestigationService(db).get(incident, investigation_id))
+
+
+@router.get("/{number}/investigations/{investigation_id}/feedback", response_model=FeedbackSummary)
+def get_feedback(number: str, investigation_id: int, db: DB, user: Reader) -> FeedbackSummary:
+    """Your verdict on this investigation (if any) and everyone's counts."""
+    incident = IncidentService(db).get(number)
+    run = InvestigationService(db).get(incident, investigation_id)
+    return FeedbackSummary(**FeedbackService(db).summary(run, user))
+
+
+@router.put("/{number}/investigations/{investigation_id}/feedback", response_model=FeedbackOut)
+def submit_feedback(number: str, investigation_id: int, data: FeedbackIn, db: DB, user: Rater) -> FeedbackOut:
+    """👍 useful / 👎 incorrect (with a reason). One verdict per person; submitting again replaces it."""
+    incident = IncidentService(db).get(number)
+    run = InvestigationService(db).get(incident, investigation_id)
+    return FeedbackOut.model_validate(FeedbackService(db).submit(incident, run, user, data.rating, data.reason,
+                                                                 data.comment))  # fmt: skip
+
+
+@router.delete("/{number}/investigations/{investigation_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
+def withdraw_feedback(number: str, investigation_id: int, db: DB, user: Rater) -> None:
+    incident = IncidentService(db).get(number)
+    FeedbackService(db).withdraw(incident, InvestigationService(db).get(incident, investigation_id), user)
 
 
 @router.post(

@@ -19,11 +19,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.hypotheses import CHANGE_MARKERS, HYPOTHESES, UNKNOWN_STEPS, Hypothesis, QueryTemplate
 from app.ai.retrieval import KnowledgeRetriever, build_query
-from app.models import Incident, Service
+from app.models import Incident, Service, service_dependencies
 from app.models.enums import EvidenceKind, EvidenceStance
 from app.repositories.evidence import EvidenceRepository, LogPattern
 
@@ -96,6 +97,8 @@ class InvestigationResult:
     # What the knowledge-base retrieval is scoped by (set by the winning hypothesis).
     emitter: str | None = None
     doc_tags: tuple[str, ...] = ()
+    # Every hypothesis that matched, best first, with its confidence: the runner-ups an engineer may want to rule out.
+    alternatives: list[tuple[str, float]] = field(default_factory=list)
 
 
 class _Defaults(dict[str, Any]):
@@ -153,11 +156,20 @@ class InvestigationEngine:
         end = min(incident.resolved_at or latest or start + ONSET_WINDOW, start + ONSET_WINDOW)
         end = max(end, start + timedelta(minutes=1))
 
+        declared = incident.affected_services or ([incident.primary_service] if incident.primary_service else [])
         scope: dict[str, Service] = {}
-        for svc in incident.affected_services or ([incident.primary_service] if incident.primary_service else []):
+        for svc in declared:
             scope[svc.name] = svc
             for dep in svc.dependencies:
                 scope.setdefault(dep.name, dep)
+        # Direct dependents too: a fault in a shared component (the database) is often only *logged* by its callers
+        # ("QueuePool limit" comes from order-service), so an incident declared on the component must see them.
+        for dependent in self.db.scalars(
+            select(Service)
+            .join(service_dependencies, service_dependencies.c.service_id == Service.id)
+            .where(service_dependencies.c.depends_on_id.in_([s.id for s in declared]))
+        ):
+            scope.setdefault(dependent.name, dependent)
         ids = [s.id for s in scope.values()]
 
         b_start, b_end = start - BASELINE, start - BASELINE_GAP
@@ -363,7 +375,7 @@ class InvestigationEngine:
                 chunk_id=p.chunk_id,
                 ref=f"{DOC_PREFIX.get(p.category, 'DOC')}-{p.slug} §{p.section}",
             )
-            for p in self.retriever.search(query, k=3, service=emitter, tags=tags)
+            for p in self.retriever.search(query, k=3, service=emitter, tags=tags, per_document=1)
         ]
 
     # -- hypotheses ------------------------------------------------------------------------------------------
@@ -454,7 +466,9 @@ class InvestigationEngine:
         ctx = self._context(incident)
         step("hypotheses")  # changes, history, scoring
         candidates = [r for h in HYPOTHESES if (r := self._evaluate(ctx, h)) is not None]
-        result = max(candidates, key=lambda r: r.confidence) if candidates else self._unknown(ctx)
+        candidates.sort(key=lambda r: r.confidence, reverse=True)
+        result = candidates[0] if candidates else self._unknown(ctx)
+        result.alternatives = [(r.hypothesis_key, r.confidence) for r in candidates]
         step("documents")  # RAG, for the winning hypothesis only (documents never change the score)
         if result.search_query and result.emitter:
             result.evidence += self._documents(result.search_query, result.emitter, result.doc_tags)

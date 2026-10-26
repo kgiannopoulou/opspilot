@@ -57,7 +57,15 @@ class KnowledgeRetriever:
         self.db = db
         self.embedder = embedder or get_embedder()
 
-    def search(self, query: str, k: int = 4, service: str | None = None, tags: tuple[str, ...] = ()) -> list[Passage]:
+    def search(
+        self,
+        query: str,
+        k: int = 4,
+        service: str | None = None,
+        tags: tuple[str, ...] = (),
+        per_document: int = MAX_PER_DOCUMENT,
+    ) -> list[Passage]:
+        """`per_document` caps passages per document (investigations use 1: three documents beat two sections)."""
         if not query.strip():
             return []
         vector = self.embedder.embed([query])[0]
@@ -97,7 +105,7 @@ class KnowledgeRetriever:
         out: list[Passage] = []
         per_doc: dict[int, int] = {}
         for passage in ranked:
-            if passage.score < MIN_SCORE or per_doc.get(passage.document_id, 0) >= MAX_PER_DOCUMENT:
+            if passage.score < MIN_SCORE or per_doc.get(passage.document_id, 0) >= per_document:
                 continue
             per_doc[passage.document_id] = per_doc.get(passage.document_id, 0) + 1
             out.append(passage)

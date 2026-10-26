@@ -18,7 +18,7 @@ OpsPilot is an application support platform that correlates **support tickets**,
 **service metrics** to help support engineers investigate incidents. Instead of a chatbot, it behaves like a
 colleague who has already read the logs: every conclusion it draws is backed by evidence you can click through.
 
-> **Status:** active development — built in public, step by step (18 steps so far, see the [roadmap](#roadmap)).
+> **Status:** active development — built in public, step by step (19 steps so far, see the [roadmap](#roadmap)).
 
 ## The problem
 
@@ -542,6 +542,42 @@ is what production says; the offline benchmark (next step) is what a change is t
 | `DELETE` | `/api/v1/incidents/{n}/investigations/{id}/feedback` | Withdraw your verdict |
 | `GET` | `/api/v1/ai/quality` | AI quality report |
 
+## Evaluation
+
+A demo that looks right on three seeded incidents proves little. [`app/eval`](backend/app/eval) is an offline
+benchmark with known answers, and its report ([docs/evaluation](docs/evaluation/README.md)) is generated from the run —
+no number below is typed by hand:
+
+| Suite | Set | Metric | Result |
+|---|---|---|---:|
+| Triage | 50 hand-labelled tickets (clear, vague, misleading) | Category / priority / service accuracy | 82% / 68% / 80% |
+| Retrieval | 40 queries → documents an expert would open | Recall@1 / Recall@3 / MRR | 92% / 100% / 0.96 |
+| Investigations | 41 simulated incidents | Correct root cause (top-1) | 95% |
+| | 37 with an injected fault | Runbook for that fault in the top 3 | 95% |
+| | 4 with nothing wrong | "No known failure mode", confidence ≤ 35 % | 100% |
+| | 253 citations | Resolve to evidence of the same run | 100% |
+| | | Median / p95 latency (engine + writer) | 25 / 44 ms |
+
+- **Ground truth you cannot fudge:** investigation cases are produced by the simulator, so the expected root cause is
+  the fault that was *injected*. Cases vary noise seed, how long the outage has run (5 / 15 / 40 min), which service
+  the incident is declared on (symptom vs root cause), overlapping faults (each incident must find its own cause, not
+  the louder neighbour's) and incidents where nothing is wrong.
+- **It found real bugs.** The first run scored 93% root cause and **62%** runbook recall. Declaring the pool-exhaustion
+  incident on `postgres-primary` gave *unknown*, because the `QueuePool limit` errors are logged by its *callers* and
+  the scope only followed dependencies — it now includes direct dependents. Two sections of one troubleshooting guide
+  crowded the runbook out of the top 3 — investigations now take one passage per document. Result: 95% / 95%. Both
+  runs are in [`history.json`](docs/evaluation/history.json).
+- **Honest about what the numbers mean:** the extractive writer passes the grounding check by construction; with
+  `OPSPILOT_LLM_PROVIDER=anthropic` the same benchmark measures the LLM writer's rejection rate. The hypothesis library
+  has three failure modes, so top-3 is near-trivial and top-1 is reported. Priority is the weakest triage field (vague
+  tickets 40%) — exactly where the human review step exists. Every miss is listed in the report.
+- **Regression gate:** [`test_evaluation.py`](backend/tests/test_evaluation.py) runs all three suites in CI (~35 s) and
+  fails if any metric drops below the published results.
+
+```bash
+cd backend && python -m app.eval.run --note "what changed"   # rebuilds docs/evaluation from a fresh database
+```
+
 ## Repository structure
 
 ```
@@ -557,12 +593,13 @@ opspilot/
 │   │   ├── repositories/ database access
 │   │   ├── ai/          evidence engine, chunking, embeddings, retrieval, LLM writer
 │   │   ├── workers/     Redis Streams queue, job handlers, worker loop
+│   │   ├── eval/        offline AI benchmark: datasets, simulated cases, report generator
 │   │   └── core/        config, database, security
 │   └── tests/
 ├── simulator/           ShopStream environment (log_generator/, metric_generator/, incidents/)
 ├── knowledge-base/      runbooks/, troubleshooting/, architecture/, process/
 ├── infrastructure/      docker/ (Dockerfiles), terraform/ (planned)
-├── docs/                architecture/, decisions/, screenshots/
+├── docs/                architecture/, decisions/, evaluation/, screenshots/
 ├── .github/workflows/   CI: backend lint + tests, frontend typecheck + build, Docker build
 ├── docker-compose.yml
 ├── .env.example
@@ -605,6 +642,7 @@ other local stacks. Local development without Docker for the apps is described i
 | 16 | Redis background workers: async triage and investigations with live progress | ✅ |
 | 17 | Audit trail: activity timeline, tamper-evident hash chain, admin audit log | ✅ |
 | 18 | AI feedback: 👍/👎 with reasons, AI quality report | ✅ |
+| 19 | RAG and AI evaluation: labelled benchmark, generated report, CI regression gate | ✅ |
 
 ## License
 

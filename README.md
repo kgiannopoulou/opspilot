@@ -34,7 +34,13 @@ injectable incidents → [problem statement, personas, success metrics](docs/pro
 
 ## Demo
 
-The 90-second walkthrough is recorded in the next step.
+![90-second OpsPilot walkthrough](docs/media/opspilot-demo.gif)
+
+*90 seconds, recorded by a script against the real stack ([how](docs/media/README.md)):* a customer ticket → AI triage
+and log correlation find the live incident → the investigation streams its progress → root cause at 82 % confidence with
+the evidence (35 timeout errors, p95 latency +407 %, database healthy, a similar past incident) → retrieved runbook and
+a read-only investigation query → incident brief → resolve → audit trail.
+[Full-quality video (WebM)](docs/media/opspilot-demo.webm).
 
 **Live demo:** there is no public instance: the stack includes a SQL sandbox and, optionally, an LLM API key, which
 should not sit on the open internet. `docker compose up` starts the complete system with demo data in about three

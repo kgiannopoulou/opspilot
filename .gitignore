@@ -40,3 +40,8 @@ frontend/playwright-report/
 backend/.coverage
 backend/coverage.xml
 backend/htmlcov/
+
+# README media: intermediate output of frontend/tests/media (docs/media/README.md)
+docs/media/frames/
+docs/media/.video/
+docs/media/.state.json

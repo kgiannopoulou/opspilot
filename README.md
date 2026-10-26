@@ -18,6 +18,11 @@ incident investigations.**
 
 </div>
 
+![OpsPilot incident brief: AI root cause analysis with confidence, evidence and recommended actions](docs/screenshots/hero-incident-brief.png)
+
+<sub>A real screen, not a mock-up: the incident brief for a live demo incident. Root cause and confidence come from
+scored evidence; every line of evidence links to the log lines and metrics behind it.</sub>
+
 ## Why OpsPilot?
 
 When customers report *"payment fails after pressing Confirm Order"*, an application support engineer walks the same

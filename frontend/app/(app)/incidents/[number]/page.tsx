@@ -269,6 +269,7 @@ function InvestigationPanel({ incidentNumber, inv, canInvestigate, canRate, runn
         </div>
       </div>
 
+      <div id="queries" />
       <InvestigationQueries incident={incidentNumber} investigationId={inv.id} queries={inv.queries} canRun={canInvestigate} />
 
       <InvestigationFeedback key={inv.id} incident={incidentNumber} investigationId={inv.id} canRate={canRate} />
@@ -341,17 +342,20 @@ export default function IncidentPage({ params }: { params: Promise<{ number: str
             <StatusBadge status={i.status} />
           </div>
         </div>
-        {canInvestigate && (
-          <div className="flex flex-wrap gap-2">
-            {i.allowed_transitions.map((s) => (
+        <div className="flex flex-wrap gap-2">
+          {inv?.status === "COMPLETED" && (
+            <Link href={`/incidents/${i.number}/brief`} className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800">
+              Incident brief
+            </Link>
+          )}
+          {canInvestigate && i.allowed_transitions.map((s) => (
               <button key={s}
                 onClick={() => (s === "RESOLVED" ? (setRootCause(i.root_cause ?? inv?.root_cause ?? ""), setResolving(true)) : changeStatus(s))}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium ${s === "RESOLVED" ? "bg-emerald-600 text-white hover:bg-emerald-500" : "border border-slate-700 text-slate-200 hover:bg-slate-800"}`}>
                 {STATUS_ACTION[s]}
               </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
       {error && <ErrorBox message={error} />}

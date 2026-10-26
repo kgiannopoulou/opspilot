@@ -1,0 +1,2269 @@
+{
+  "triage": {
+    "engine": "keywords-v1",
+    "cases": 50,
+    "category_accuracy": 0.82,
+    "priority_accuracy": 0.68,
+    "service_accuracy": 0.8,
+    "all_three_correct": 0.58,
+    "by_difficulty": {
+      "clear": {
+        "cases": 34,
+        "category": 0.882,
+        "priority": 0.794,
+        "service": 0.882
+      },
+      "misleading": {
+        "cases": 6,
+        "category": 0.333,
+        "priority": 0.5,
+        "service": 0.5
+      },
+      "vague": {
+        "cases": 10,
+        "category": 0.9,
+        "priority": 0.4,
+        "service": 0.7
+      }
+    },
+    "latency": {
+      "median_ms": 4.5,
+      "p95_ms": 7.0
+    },
+    "misses": [
+      {
+        "id": "T02",
+        "difficulty": "clear",
+        "title": "Payment fails after pressing \"Confirm Order\"",
+        "got": {
+          "category": "PAYMENTS",
+          "priority": "P1",
+          "service": "payment-service"
+        },
+        "expected": {
+          "category": "PAYMENTS",
+          "priority": "P2",
+          "service": "payment-service"
+        },
+        "confidence": 0.613
+      },
+      {
+        "id": "T07",
+        "difficulty": "vague",
+        "title": "Stripe shows charges but orders say unpaid",
+        "got": {
+          "category": "PAYMENTS",
+          "priority": "P3",
+          "service": "payment-service"
+        },
+        "expected": {
+          "category": "PAYMENTS",
+          "priority": "P2",
+          "service": "payment-service"
+        },
+        "confidence": 0.74
+      },
+      {
+        "id": "T12",
+        "difficulty": "clear",
+        "title": "Account locked after one wrong password",
+        "got": {
+          "category": "AUTHENTICATION",
+          "priority": "P4",
+          "service": "auth-service"
+        },
+        "expected": {
+          "category": "AUTHENTICATION",
+          "priority": "P3",
+          "service": "auth-service"
+        },
+        "confidence": 0.91
+      },
+      {
+        "id": "T14",
+        "difficulty": "clear",
+        "title": "Logged out every few minutes",
+        "got": {
+          "category": "OTHER",
+          "priority": "P3",
+          "service": null
+        },
+        "expected": {
+          "category": "AUTHENTICATION",
+          "priority": "P2",
+          "service": "auth-service"
+        },
+        "confidence": 0.2
+      },
+      {
+        "id": "T15",
+        "difficulty": "misleading",
+        "title": "Login page slow this morning",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": "auth-service"
+        },
+        "expected": {
+          "category": "AUTHENTICATION",
+          "priority": "P3",
+          "service": "auth-service"
+        },
+        "confidence": 0.71
+      },
+      {
+        "id": "T16",
+        "difficulty": "clear",
+        "title": "How do I change my account email?",
+        "got": {
+          "category": "NOTIFICATIONS",
+          "priority": "P4",
+          "service": "notification-service"
+        },
+        "expected": {
+          "category": "AUTHENTICATION",
+          "priority": "P4",
+          "service": "auth-service"
+        },
+        "confidence": 0.74
+      },
+      {
+        "id": "T19",
+        "difficulty": "clear",
+        "title": "Orders stuck in 'processing'",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": "order-service"
+        },
+        "expected": {
+          "category": "ORDERS",
+          "priority": "P1",
+          "service": "order-service"
+        },
+        "confidence": 0.613
+      },
+      {
+        "id": "T21",
+        "difficulty": "vague",
+        "title": "Cart empties on refresh",
+        "got": {
+          "category": "ORDERS",
+          "priority": "P3",
+          "service": "order-service"
+        },
+        "expected": {
+          "category": "ORDERS",
+          "priority": "P2",
+          "service": "order-service"
+        },
+        "confidence": 0.88
+      },
+      {
+        "id": "T26",
+        "difficulty": "clear",
+        "title": "No emails going out at all",
+        "got": {
+          "category": "NOTIFICATIONS",
+          "priority": "P3",
+          "service": "notification-service"
+        },
+        "expected": {
+          "category": "NOTIFICATIONS",
+          "priority": "P2",
+          "service": "notification-service"
+        },
+        "confidence": 0.82
+      },
+      {
+        "id": "T27",
+        "difficulty": "clear",
+        "title": "Webhook deliveries failing",
+        "got": {
+          "category": "NOTIFICATIONS",
+          "priority": "P3",
+          "service": "notification-service"
+        },
+        "expected": {
+          "category": "NOTIFICATIONS",
+          "priority": "P2",
+          "service": "notification-service"
+        },
+        "confidence": 0.747
+      },
+      {
+        "id": "T32",
+        "difficulty": "vague",
+        "title": "Whole admin is sluggish",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P2",
+          "service": null
+        },
+        "expected": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": "order-service"
+        },
+        "confidence": 0.91
+      },
+      {
+        "id": "T33",
+        "difficulty": "clear",
+        "title": "Reports page never finishes loading",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P2",
+          "service": null
+        },
+        "expected": {
+          "category": "PERFORMANCE",
+          "priority": "P2",
+          "service": "order-service"
+        },
+        "confidence": 0.89
+      },
+      {
+        "id": "T34",
+        "difficulty": "clear",
+        "title": "Product search slow",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": null
+        },
+        "expected": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": "order-service"
+        },
+        "confidence": 0.91
+      },
+      {
+        "id": "T35",
+        "difficulty": "vague",
+        "title": "Storefront lag at peak hours",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P2",
+          "service": null
+        },
+        "expected": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": "order-service"
+        },
+        "confidence": 0.9
+      },
+      {
+        "id": "T37",
+        "difficulty": "clear",
+        "title": "Read replica lagging",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": "postgres-primary"
+        },
+        "expected": {
+          "category": "DATABASE",
+          "priority": "P3",
+          "service": "postgres-primary"
+        },
+        "confidence": 0.59
+      },
+      {
+        "id": "T43",
+        "difficulty": "clear",
+        "title": "Feature request: dark mode",
+        "got": {
+          "category": "OTHER",
+          "priority": "P3",
+          "service": null
+        },
+        "expected": {
+          "category": "OTHER",
+          "priority": "P4",
+          "service": null
+        },
+        "confidence": 0.2
+      },
+      {
+        "id": "T44",
+        "difficulty": "vague",
+        "title": "Customers see an error at the last step",
+        "got": {
+          "category": "OTHER",
+          "priority": "P2",
+          "service": null
+        },
+        "expected": {
+          "category": "PAYMENTS",
+          "priority": "P1",
+          "service": "payment-service"
+        },
+        "confidence": 0.2
+      },
+      {
+        "id": "T46",
+        "difficulty": "vague",
+        "title": "Merchants say their numbers are missing",
+        "got": {
+          "category": "ORDERS",
+          "priority": "P3",
+          "service": "order-service"
+        },
+        "expected": {
+          "category": "ORDERS",
+          "priority": "P2",
+          "service": "order-service"
+        },
+        "confidence": 0.86
+      },
+      {
+        "id": "T47",
+        "difficulty": "misleading",
+        "title": "Checkout works but confirmation email missing for all",
+        "got": {
+          "category": "PAYMENTS",
+          "priority": "P3",
+          "service": "payment-service"
+        },
+        "expected": {
+          "category": "NOTIFICATIONS",
+          "priority": "P2",
+          "service": "notification-service"
+        },
+        "confidence": 0.5
+      },
+      {
+        "id": "T49",
+        "difficulty": "misleading",
+        "title": "Password reset email takes an hour",
+        "got": {
+          "category": "AUTHENTICATION",
+          "priority": "P2",
+          "service": "auth-service"
+        },
+        "expected": {
+          "category": "NOTIFICATIONS",
+          "priority": "P3",
+          "service": "notification-service"
+        },
+        "confidence": 0.5
+      },
+      {
+        "id": "T50",
+        "difficulty": "misleading",
+        "title": "Slow queries after the migration",
+        "got": {
+          "category": "PERFORMANCE",
+          "priority": "P3",
+          "service": "order-service"
+        },
+        "expected": {
+          "category": "DATABASE",
+          "priority": "P2",
+          "service": "postgres-primary"
+        },
+        "confidence": 0.843
+      }
+    ]
+  },
+  "retrieval": {
+    "embedding_model": "hashing-v1",
+    "cases": 40,
+    "recall_at_1": 0.925,
+    "recall_at_3": 1.0,
+    "recall_at_5": 1.0,
+    "mrr": 0.963,
+    "latency": {
+      "median_ms": 3.9,
+      "p95_ms": 4.5
+    },
+    "misses": []
+  },
+  "investigate": {
+    "engine": "rules-v1",
+    "writer": "extractive-v1",
+    "cases": 41,
+    "root_cause_accuracy": 0.951,
+    "root_cause_accuracy_faults": 0.946,
+    "root_cause_in_top3": 1.0,
+    "no_fault_low_confidence": 1.0,
+    "runbook_recall_at_3": 0.946,
+    "citations": 253,
+    "citation_validity": 1.0,
+    "unsupported_numbers": 0,
+    "grounding_pass_rate": 1.0,
+    "llm_drafts_rejected": 0,
+    "mean_confidence_when_correct": 0.8,
+    "mean_confidence_when_wrong": 0.531,
+    "by_group": {
+      "single fault": {
+        "cases": 27,
+        "accuracy": 1.0
+      },
+      "declared on root cause": {
+        "cases": 4,
+        "accuracy": 1.0
+      },
+      "overlapping faults": {
+        "cases": 6,
+        "accuracy": 0.667
+      },
+      "no fault": {
+        "cases": 4,
+        "accuracy": 1.0
+      }
+    },
+    "latency": {
+      "median_ms": 20.5,
+      "p95_ms": 30.0
+    },
+    "misses": [
+      {
+        "id": "I34",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 20,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "smtp_authentication_failure",
+        "correct": false,
+        "in_top3": true,
+        "confidence": 0.598,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.598
+          ],
+          [
+            "db_connection_pool_exhaustion",
+            0.52
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a71",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a70"
+        ],
+        "document_hit": false,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 22.9
+      },
+      {
+        "id": "I36",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 20,
+        "expected": "payment_gateway_timeout",
+        "got": "db_connection_pool_exhaustion",
+        "correct": false,
+        "in_top3": true,
+        "confidence": 0.465,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.465
+          ],
+          [
+            "payment_gateway_timeout",
+            0.401
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a72",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": false,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 9,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 21.3
+      }
+    ],
+    "results": [
+      {
+        "id": "I01",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 5,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 40.3
+      },
+      {
+        "id": "I02",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 5,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 18.7
+      },
+      {
+        "id": "I03",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 5,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 29.8
+      },
+      {
+        "id": "I04",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 15,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 19.4
+      },
+      {
+        "id": "I05",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 15,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 18.4
+      },
+      {
+        "id": "I06",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 15,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 22.5
+      },
+      {
+        "id": "I07",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 40,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 18.5
+      },
+      {
+        "id": "I08",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 40,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 21.4
+      },
+      {
+        "id": "I09",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 40,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 25.5
+      },
+      {
+        "id": "I10",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 5,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 22.3
+      },
+      {
+        "id": "I11",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 5,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 20.2
+      },
+      {
+        "id": "I12",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 5,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 30.9
+      },
+      {
+        "id": "I13",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 15,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 23.4
+      },
+      {
+        "id": "I14",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 15,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 28.8
+      },
+      {
+        "id": "I15",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 15,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 20.5
+      },
+      {
+        "id": "I16",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 40,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 17.9
+      },
+      {
+        "id": "I17",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 40,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 19.4
+      },
+      {
+        "id": "I18",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 40,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.945,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.945
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 18.0
+      },
+      {
+        "id": "I19",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 5,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 19.1
+      },
+      {
+        "id": "I20",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 5,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 19.3
+      },
+      {
+        "id": "I21",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 5,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 19.5
+      },
+      {
+        "id": "I22",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 15,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 17.5
+      },
+      {
+        "id": "I23",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 15,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 18.8
+      },
+      {
+        "id": "I24",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 15,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 25.9
+      },
+      {
+        "id": "I25",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 40,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 30.0
+      },
+      {
+        "id": "I26",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 40,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 22.1
+      },
+      {
+        "id": "I27",
+        "group": "single fault",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 40,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 21.2
+      },
+      {
+        "id": "I28",
+        "group": "declared on root cause",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "postgres-primary"
+        ],
+        "minutes_running": 20,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.935,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.935
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 28.8
+      },
+      {
+        "id": "I29",
+        "group": "declared on root cause",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "postgres-primary"
+        ],
+        "minutes_running": 20,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.935,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.935
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 27.8
+      },
+      {
+        "id": "I30",
+        "group": "declared on root cause",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "notification-service"
+        ],
+        "minutes_running": 20,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 26.8
+      },
+      {
+        "id": "I31",
+        "group": "declared on root cause",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          }
+        ],
+        "declared_on": [
+          "notification-service"
+        ],
+        "minutes_running": 20,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 19.1
+      },
+      {
+        "id": "I32",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 20,
+        "expected": "payment_gateway_timeout",
+        "got": "payment_gateway_timeout",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.823,
+        "alternatives": [
+          [
+            "payment_gateway_timeout",
+            0.823
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-payment-gateway-timeout \u00a70",
+          "ARCH-payment-service \u00a72",
+          "GUIDE-checkout-incident-response \u00a71"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 7,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 17.5
+      },
+      {
+        "id": "I33",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 20,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 18.2
+      },
+      {
+        "id": "I34",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 20,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "smtp_authentication_failure",
+        "correct": false,
+        "in_top3": true,
+        "confidence": 0.598,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.598
+          ],
+          [
+            "db_connection_pool_exhaustion",
+            0.52
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a71",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a70"
+        ],
+        "document_hit": false,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 22.9
+      },
+      {
+        "id": "I35",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "smtp_auth_failure",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 20,
+        "expected": "smtp_authentication_failure",
+        "got": "smtp_authentication_failure",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.684,
+        "alternatives": [
+          [
+            "smtp_authentication_failure",
+            0.684
+          ],
+          [
+            "db_connection_pool_exhaustion",
+            0.512
+          ]
+        ],
+        "expected_documents": [
+          "smtp-credential-rotation"
+        ],
+        "documents": [
+          "GUIDE-password-reset-errors \u00a70",
+          "ARCH-authentication-service \u00a72",
+          "RUNBOOK-smtp-credential-rotation \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 6,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 22.5
+      },
+      {
+        "id": "I36",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 20,
+        "expected": "payment_gateway_timeout",
+        "got": "db_connection_pool_exhaustion",
+        "correct": false,
+        "in_top3": true,
+        "confidence": 0.465,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.465
+          ],
+          [
+            "payment_gateway_timeout",
+            0.401
+          ]
+        ],
+        "expected_documents": [
+          "payment-gateway-timeout"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a72",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": false,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 9,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 21.3
+      },
+      {
+        "id": "I37",
+        "group": "overlapping faults",
+        "faults": [
+          {
+            "scenario": "db_pool_exhaustion",
+            "offset_minutes": 0
+          },
+          {
+            "scenario": "payment_gateway_timeout",
+            "offset_minutes": -10
+          }
+        ],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 20,
+        "expected": "db_connection_pool_exhaustion",
+        "got": "db_connection_pool_exhaustion",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.491,
+        "alternatives": [
+          [
+            "db_connection_pool_exhaustion",
+            0.491
+          ],
+          [
+            "payment_gateway_timeout",
+            0.372
+          ]
+        ],
+        "expected_documents": [
+          "db-connection-pool-exhaustion"
+        ],
+        "documents": [
+          "RUNBOOK-db-connection-pool-exhaustion \u00a70",
+          "GUIDE-slow-merchant-dashboard \u00a71",
+          "GUIDE-database-troubleshooting \u00a73"
+        ],
+        "document_hit": true,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 9,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 21.1
+      },
+      {
+        "id": "I38",
+        "group": "no fault",
+        "faults": [],
+        "declared_on": [
+          "payment-service"
+        ],
+        "minutes_running": 20,
+        "expected": "unknown",
+        "got": "unknown",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.1,
+        "alternatives": [],
+        "expected_documents": [],
+        "documents": [],
+        "document_hit": null,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 1,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 14.9
+      },
+      {
+        "id": "I39",
+        "group": "no fault",
+        "faults": [],
+        "declared_on": [
+          "order-service"
+        ],
+        "minutes_running": 20,
+        "expected": "unknown",
+        "got": "unknown",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.1,
+        "alternatives": [],
+        "expected_documents": [],
+        "documents": [],
+        "document_hit": null,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 1,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 12.8
+      },
+      {
+        "id": "I40",
+        "group": "no fault",
+        "faults": [],
+        "declared_on": [
+          "auth-service"
+        ],
+        "minutes_running": 20,
+        "expected": "unknown",
+        "got": "unknown",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.1,
+        "alternatives": [],
+        "expected_documents": [],
+        "documents": [],
+        "document_hit": null,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 1,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 15.2
+      },
+      {
+        "id": "I41",
+        "group": "no fault",
+        "faults": [],
+        "declared_on": [
+          "notification-service"
+        ],
+        "minutes_running": 20,
+        "expected": "unknown",
+        "got": "unknown",
+        "correct": true,
+        "in_top3": true,
+        "confidence": 0.1,
+        "alternatives": [],
+        "expected_documents": [],
+        "documents": [],
+        "document_hit": null,
+        "writer": "extractive-v1",
+        "grounding_passed": true,
+        "citations": 1,
+        "unknown_refs": [],
+        "unsupported_numbers": [],
+        "rejected_llm_draft": false,
+        "latency_ms": 14.9
+      }
+    ]
+  },
+  "meta": {
+    "generated_at": "2026-10-26T07:32:11+00:00",
+    "commit": "e305eb8",
+    "embedding_model": "hashing-v1",
+    "classifier": "keywords-v1",
+    "engine": "rules-v1",
+    "writer": "extractive-v1"
+  },
+  "history": [
+    {
+      "commit": "5e6dbe3-dirty",
+      "generated_at": "2026-10-26T07:23:05+00:00",
+      "note": "baseline: first benchmark run",
+      "triage": {
+        "engine": "keywords-v1",
+        "cases": 50,
+        "category_accuracy": 0.82,
+        "priority_accuracy": 0.68,
+        "service_accuracy": 0.8,
+        "all_three_correct": 0.58
+      },
+      "retrieval": {
+        "embedding_model": "hashing-v1",
+        "cases": 40,
+        "recall_at_1": 0.925,
+        "recall_at_3": 1.0,
+        "recall_at_5": 1.0,
+        "mrr": 0.963
+      },
+      "investigate": {
+        "engine": "rules-v1",
+        "writer": "extractive-v1",
+        "cases": 41,
+        "root_cause_accuracy": 0.927,
+        "root_cause_accuracy_faults": 0.919,
+        "root_cause_in_top3": 0.951,
+        "no_fault_low_confidence": 1.0,
+        "runbook_recall_at_3": 0.622,
+        "citations": 248,
+        "citation_validity": 1.0,
+        "unsupported_numbers": 0,
+        "grounding_pass_rate": 1.0,
+        "llm_drafts_rejected": 0,
+        "mean_confidence_when_correct": 0.772,
+        "mean_confidence_when_wrong": 0.433
+      }
+    },
+    {
+      "commit": "e305eb8",
+      "generated_at": "2026-10-26T07:32:11+00:00",
+      "note": "engine scope includes dependents; one passage per document",
+      "triage": {
+        "engine": "keywords-v1",
+        "cases": 50,
+        "category_accuracy": 0.82,
+        "priority_accuracy": 0.68,
+        "service_accuracy": 0.8,
+        "all_three_correct": 0.58
+      },
+      "retrieval": {
+        "embedding_model": "hashing-v1",
+        "cases": 40,
+        "recall_at_1": 0.925,
+        "recall_at_3": 1.0,
+        "recall_at_5": 1.0,
+        "mrr": 0.963
+      },
+      "investigate": {
+        "engine": "rules-v1",
+        "writer": "extractive-v1",
+        "cases": 41,
+        "root_cause_accuracy": 0.951,
+        "root_cause_accuracy_faults": 0.946,
+        "root_cause_in_top3": 1.0,
+        "no_fault_low_confidence": 1.0,
+        "runbook_recall_at_3": 0.946,
+        "citations": 253,
+        "citation_validity": 1.0,
+        "unsupported_numbers": 0,
+        "grounding_pass_rate": 1.0,
+        "llm_drafts_rejected": 0,
+        "mean_confidence_when_correct": 0.8,
+        "mean_confidence_when_wrong": 0.531
+      }
+    }
+  ]
+}

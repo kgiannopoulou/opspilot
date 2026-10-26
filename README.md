@@ -107,7 +107,7 @@ cannot introduce facts the grounding check would not find, and never decides the
 | **Backend** | Python 3.12, FastAPI, Pydantic 2, SQLAlchemy 2 (typed, mypy-checked), Alembic |
 | **Data** | PostgreSQL 16 + pgvector (HNSW), Redis 7 (Streams, pub/sub, rate limits, cache) |
 | **AI** | Claude (`claude-opus-5-5`, JSON-schema structured output) — optional; deterministic hashing embeddings or `bge-small-en-v1.5` (fastembed); sqlglot for SQL validation |
-| **Infrastructure** | Docker Compose (non-root, read-only, capability-free containers), GitHub Actions, Prometheus + Grafana, Trivy, CodeQL, gitleaks, Dependabot |
+| **Infrastructure** | Docker Compose (non-root, read-only, capability-free containers), GitHub Actions, Prometheus + Grafana, Trivy, CodeQL, gitleaks, Bandit, pip-audit, Dependabot alerts |
 | **Testing** | pytest (unit + integration against real PostgreSQL/Redis), Vitest + Testing Library, Playwright E2E |
 
 ## Example investigation
@@ -178,7 +178,7 @@ Built as if it will be attacked; every control is implemented and tested. Full w
 | Brute-force login / credential stuffing | Per-account lockout + per-client rate limit across accounts; bcrypt |
 | Sensitive log exposure | Redaction filter for tokens, keys, passwords and e-mails; `422`s never echo secrets |
 | LLM SQL generation | Read-only sandbox: AST allowlist → human click → read-only transaction as a least-privilege role |
-| Vulnerable dependencies / images | pip-audit, npm audit, Trivy image + config scans, Dependabot, SHA-pinned Actions |
+| Vulnerable dependencies / images | pip-audit, npm audit, Trivy image + config scans, Dependabot alerts, SHA-pinned Actions, OS patches at build |
 
 ## Testing
 
@@ -326,7 +326,7 @@ opspilot/
 ├── knowledge-base/      runbooks, troubleshooting guides, architecture notes, process
 ├── infrastructure/      Dockerfiles, Prometheus, alert rules, Grafana
 ├── docs/                architecture, decisions, evaluation, security, threat model, features, media
-└── .github/             CI and security workflows, Dependabot
+└── .github/             CI and security workflows
 ```
 
 </details>

@@ -36,6 +36,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: ${{ matrix.image }}:local
+          scanners: vuln  # secrets are gitleaks' job; the image scan flags example keys inside third-party SDKs
           format: sarif
           output: trivy-${{ matrix.image }}.sarif
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
@@ -48,6 +49,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: ${{ matrix.image }}:local
+          scanners: vuln
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true

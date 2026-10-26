@@ -37,9 +37,9 @@ tested, and listed with the file that enforces it. The attack-by-attack view is 
 | **Log redaction** | A logging filter on every handler masks JWTs, bearer/basic credentials, API keys (`sk-ant-…`, GitHub, AWS), passwords in connection strings, `password=`/`token=`/`api_key=` pairs, secret-named structured fields, and e-mail addresses (`m***@opspilot.dev`) — in messages, extras and tracebacks | [`core/redaction.py`](../backend/app/core/redaction.py) | `test_security.py` |
 | **Audit logging** | Every security-relevant action (sign-ins and failures, token reuse, user/role changes, AI actions, every SQL run or refusal, knowledge quarantine and review) is an `audit_events` row in the same transaction. Rows are hash-chained by a trigger; UPDATE/DELETE/TRUNCATE are refused by the database; `GET /audit/verify` detects edits and gaps | [`migrations/0009`](../backend/migrations/versions/0009_tamper_evident_audit_trail.py) | `test_audit.py` |
 | **Prompt-injection defence** | Ingestion validation and quarantine, retrieved-context isolation, schema-constrained output, injection and grounding checks on drafts, no model privileges — [below](#prompt-injection) | [`ai/injection.py`](../backend/app/ai/injection.py) | `test_prompt_injection.py`, eval suite |
-| **Dependency scanning** | `pip-audit --strict` and `npm audit` (production deps) on every PR; Dependabot weekly PRs for pip, npm, Docker base images and GitHub Actions; all Actions pinned to commit SHAs | [`ci.yml`](../.github/workflows/ci.yml), [`dependabot.yml`](../.github/dependabot.yml) | CI |
+| **Dependency scanning** | `pip-audit --strict` and `npm audit` (production deps) on every PR; Dependabot vulnerability alerts on the repository (alerts rather than bot PRs, so every change is reviewed and committed by a person); all GitHub Actions pinned to commit SHAs | [`ci.yml`](../.github/workflows/ci.yml) | CI |
 | **SAST & secret scanning** | Bandit (fails on medium+), CodeQL `security-extended` for Python and TypeScript, gitleaks over the full git history | [`ci.yml`](../.github/workflows/ci.yml), [`security.yml`](../.github/workflows/security.yml) | CI |
-| **Container scanning** | Trivy on both images (fails on fixable HIGH/CRITICAL, all findings uploaded to GitHub code scanning) and Trivy misconfiguration scan of Dockerfiles and compose; runs weekly too, because new CVEs appear in unchanged images | [`security.yml`](../.github/workflows/security.yml) | CI |
+| **Container scanning** | Trivy on both images (fails on fixable HIGH/CRITICAL, all findings uploaded to GitHub code scanning) and Trivy misconfiguration scan of Dockerfiles and compose; runs weekly too, because new CVEs appear in unchanged images. Images apply OS security updates at build time and ship no package managers in the UI runtime | [`security.yml`](../.github/workflows/security.yml) | CI |
 | **Container hardening** | Non-root users, read-only root filesystems, `cap_drop: ALL`, `no-new-privileges`, multi-stage builds without compilers, data ports bound to `127.0.0.1` | [`docker-compose.yml`](../docker-compose.yml), [`infrastructure/docker`](../infrastructure/docker) | E2E against the hardened stack |
 
 ## Prompt injection
@@ -77,6 +77,18 @@ and asserts the obeying draft is rejected and no role changes.
 **What is not claimed.** Heuristics will not catch every paraphrase, and isolation reduces rather than eliminates the
 chance a model follows embedded text. The design goal is that a successful injection can at worst produce a wrong
 *suggestion* that a human reviews — never an action, a privilege change or data leaving the system.
+
+## What the scanners found on their first run
+
+The security workflow earned its place on its first run, and every finding was fixed rather than suppressed (except
+one reviewed false positive):
+
+| Scanner | Finding | Fix |
+|---|---|---|
+| Bandit B613 (Trojan Source) | `ai/injection.py` contained literal zero-width / bidirectional control characters inside the very regex that detects them (a tool had decoded the `\u202e`-style escapes) — invisible to a reviewer, exactly the hidden-text technique the module defends against | Escapes restored in source, tests and dataset |
+| Trivy (UI image) | 10 HIGH CVEs in the npm CLI bundled with `node:22-alpine` (brace-expansion, picomatch, pacote, sigstore, ip-address) — never used at runtime | Package managers removed from the runtime stage |
+| Trivy (API image) | A Debian `libpcre2` HIGH CVE fixed after the base image was published; "secrets" that were example API keys inside the Anthropic SDK's own source | `apt-get upgrade` in the runtime stage; image scans limited to vulnerabilities (secret scanning is gitleaks' job) |
+| gitleaks | `token=…` fixture in the log-redaction tests | Reviewed false positive, pinned by fingerprint in [`.gitleaksignore`](../.gitleaksignore) |
 
 ## Running the scans locally
 

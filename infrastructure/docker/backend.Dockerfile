@@ -12,7 +12,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH=/venv/bin:$PATH \
     PYTHONPATH=/app:/app/backend
-RUN useradd --create-home --uid 10001 opspilot
+# Pick up Debian security fixes released after the base image was published (Trivy fails the build otherwise).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 opspilot
 COPY --from=build /venv /venv
 WORKDIR /app
 COPY --chown=root:root backend backend

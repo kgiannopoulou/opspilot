@@ -25,7 +25,7 @@ import unicodedata
 from dataclasses import asdict, dataclass
 
 # Characters that render as nothing (or reorder text) — used to hide instructions from human reviewers.
-INVISIBLE = re.compile("[​-‏‪-‮⁠-⁤⁦-⁩﻿­]")
+INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\u00ad]")
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 
